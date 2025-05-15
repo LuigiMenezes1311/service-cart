@@ -52,7 +52,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         (item) => item.id === product.id && item.selectedModifierValue === selectedModifierValue
       )
 
-      const productPrice = modifierPrice || product.displayPrice || product.prices[0]?.amount || 0;
+      const productPrice = modifierPrice !== undefined ? modifierPrice : (product.displayPrice || product.prices[0]?.amount || 0);
 
       if (existingItemIndex >= 0) {
         const updatedItems = [...prevItems]

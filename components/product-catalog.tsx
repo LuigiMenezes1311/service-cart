@@ -109,7 +109,7 @@ export function ProductCatalog() {
         <AlertTriangle className="h-12 w-12 text-red-500 mb-4" />
         <p className="text-red-700 font-semibold text-xl mb-2">Erro ao carregar catálogo</p>
         <p className="text-red-600 text-sm text-center mb-6">{error}</p>
-        <Button onClick={loadData} className="border-red-300 text-red-700 hover:bg-red-100">
+        <Button onClick={loadData} className="border border-red-300 text-red-700 hover:bg-red-100">
           Tentar novamente
         </Button>
       </div>

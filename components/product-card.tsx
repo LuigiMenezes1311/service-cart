@@ -6,8 +6,19 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CheckCircle } from "lucide-react";
 
+interface ExtendedProductDeliverable extends ProductDeliverable {
+  name?: string;
+  description?: string;
+}
+
+interface ExtendedProduct extends Omit<Product, 'image'> {
+  image: string;
+  displayPrice: number;
+  deliverables: ExtendedProductDeliverable[];
+}
+
 interface ProductCardProps {
-  product: Product & { image?: string; displayPrice: number };
+  product: ExtendedProduct;
   allModifierTypes: ModifierType[];
   onAddToCart: (product: Product, quantity: number, selectedModifierValue?: string, modifierPrice?: number) => void;
   isInCart: (productId: string, selectedModifierValue?: string) => boolean;
@@ -16,11 +27,6 @@ interface ProductCardProps {
 const formatCurrencyBRL = (amount: number) => {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(amount);
 };
-
-interface DeliverableWithDetails extends ProductDeliverable {
-  name?: string;
-  description?: string;
-}
 
 export function ProductCard({ product, allModifierTypes, onAddToCart, isInCart }: ProductCardProps) {
   // Debug: vamos verificar a estrutura do produto e modificadores
@@ -125,7 +131,7 @@ export function ProductCard({ product, allModifierTypes, onAddToCart, isInCart }
       <div className="space-y-1.5 text-sm text-gray-600 mb-6 flex-grow">
         <h4 className="font-medium text-gray-700 mb-2">Inclui:</h4>
         <ul className="space-y-2">
-          {(product.deliverables as DeliverableWithDetails[]).map((deliverable, index) => (
+          {product.deliverables.map((deliverable, index) => (
             <li key={deliverable.id} className="flex items-start">
               <CheckCircle className="h-4 w-4 text-gray-400 mr-2 flex-shrink-0 mt-0.5" />
               <span>{deliverable.name || `Entregável ${index + 1}`}</span>
