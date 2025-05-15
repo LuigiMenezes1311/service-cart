@@ -1,0 +1,2069 @@
+https://api.sales.dev.mktlab.app/documentation/json
+Explore
+@fastify/swagger
+ 9.5.1 
+OAS 2.0
+https://api.sales.dev.mktlab.app/documentation/json
+Sessions
+
+
+POST
+/sessions
+
+Parameters
+Try it out
+Name	Description
+body
+object
+(body)
+Example Value
+Model
+{
+  "name": "string",
+  "salesforceLeadId": "string"
+}
+Parameter content type
+
+application/json
+Responses
+Response content type
+
+application/json
+Code	Description
+200	
+Default Response
+
+Example Value
+Model
+{
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "leadId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "oneTimeOfferId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "recurrentOfferId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "expiresAt": "string",
+  "createdAt": "string",
+  "updatedAt": "string"
+}
+
+GET
+/sessions/lead/{leadId}
+
+Parameters
+Try it out
+Name	Description
+leadId *
+string
+(path)
+leadId
+Responses
+Response content type
+
+application/json
+Code	Description
+200	
+Default Response
+
+Example Value
+Model
+{
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "leadId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "oneTimeOfferId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "recurrentOfferId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "expiresAt": "string",
+  "createdAt": "string",
+  "updatedAt": "string"
+}
+
+GET
+/sessions/{sessionId}
+
+Parameters
+Try it out
+Name	Description
+sessionId *
+string
+(path)
+sessionId
+Responses
+Response content type
+
+application/json
+Code	Description
+200	
+Default Response
+
+Example Value
+Model
+{
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "leadId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "oneTimeOfferId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "recurrentOfferId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "expiresAt": "string",
+  "createdAt": "string",
+  "updatedAt": "string"
+}
+Offers
+
+
+GET
+/offers/{offerId}
+
+Parameters
+Try it out
+Name	Description
+offerId *
+string
+(path)
+offerId
+Responses
+Response content type
+
+application/json
+Code	Description
+200	
+Default Response
+
+Example Value
+Model
+{
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "leadId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "couponId": "string",
+  "couponDiscountPercentage": 100,
+  "couponDiscountTotal": 1000000000,
+  "installmentId": "string",
+  "installmentMonths": 120,
+  "installmentDiscountPercentage": 100,
+  "installmentDiscountTotal": 1000000000,
+  "offerDurationId": "string",
+  "offerDurationMonths": 120,
+  "offerDurationDiscountPercentage": 100,
+  "offerDurationDiscountTotal": 1000000000,
+  "projectStartDate": "string",
+  "paymentStartDate": "string",
+  "payDay": 28,
+  "status": "string",
+  "type": "ONE_TIME",
+  "subtotalPrice": 1000000000,
+  "totalPrice": 1000000000,
+  "createdAt": "string",
+  "updatedAt": "string",
+  "offerItems": [
+    {
+      "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "offerId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "productId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "priceId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "productType": "string",
+      "price": 0,
+      "quantity": 0,
+      "totalPrice": 0
+    }
+  ]
+}
+
+POST
+/offers/items
+
+Parameters
+Try it out
+Name	Description
+body
+object
+(body)
+Example Value
+Model
+{
+  "offerId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "productId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "priceId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "quantity": 0
+}
+Parameter content type
+
+application/json
+Responses
+Response content type
+
+application/json
+Code	Description
+200	
+Default Response
+
+Example Value
+Model
+{
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "leadId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "couponId": "string",
+  "couponDiscountPercentage": 100,
+  "couponDiscountTotal": 1000000000,
+  "installmentId": "string",
+  "installmentMonths": 120,
+  "installmentDiscountPercentage": 100,
+  "installmentDiscountTotal": 1000000000,
+  "offerDurationId": "string",
+  "offerDurationMonths": 120,
+  "offerDurationDiscountPercentage": 100,
+  "offerDurationDiscountTotal": 1000000000,
+  "projectStartDate": "string",
+  "paymentStartDate": "string",
+  "payDay": 28,
+  "status": "string",
+  "type": "ONE_TIME",
+  "subtotalPrice": 1000000000,
+  "totalPrice": 1000000000,
+  "createdAt": "string",
+  "updatedAt": "string",
+  "offerItems": [
+    {
+      "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "offerId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "productId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "priceId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "productType": "string",
+      "price": 0,
+      "quantity": 0,
+      "totalPrice": 0
+    }
+  ]
+}
+
+DELETE
+/offers/{offerId}/items/{offerItemId}
+
+Parameters
+Try it out
+Name	Description
+offerId *
+string
+(path)
+offerId
+offerItemId *
+string
+(path)
+offerItemId
+Responses
+Response content type
+
+application/json
+Code	Description
+200	
+Default Response
+
+Example Value
+Model
+{
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "leadId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "couponId": "string",
+  "couponDiscountPercentage": 100,
+  "couponDiscountTotal": 1000000000,
+  "installmentId": "string",
+  "installmentMonths": 120,
+  "installmentDiscountPercentage": 100,
+  "installmentDiscountTotal": 1000000000,
+  "offerDurationId": "string",
+  "offerDurationMonths": 120,
+  "offerDurationDiscountPercentage": 100,
+  "offerDurationDiscountTotal": 1000000000,
+  "projectStartDate": "string",
+  "paymentStartDate": "string",
+  "payDay": 28,
+  "status": "string",
+  "type": "ONE_TIME",
+  "subtotalPrice": 1000000000,
+  "totalPrice": 1000000000,
+  "createdAt": "string",
+  "updatedAt": "string",
+  "offerItems": [
+    {
+      "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "offerId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "productId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "priceId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "productType": "string",
+      "price": 0,
+      "quantity": 0,
+      "totalPrice": 0
+    }
+  ]
+}
+
+PUT
+/offers
+
+Parameters
+Try it out
+Name	Description
+body
+object
+(body)
+Example Value
+Model
+{
+  "offerId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "projectStartDate": "string",
+  "paymentStartDate": "string",
+  "payDay": 28
+}
+Parameter content type
+
+application/json
+Responses
+Response content type
+
+application/json
+Code	Description
+200	
+Default Response
+
+Example Value
+Model
+{
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "leadId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "couponId": "string",
+  "couponDiscountPercentage": 100,
+  "couponDiscountTotal": 1000000000,
+  "installmentId": "string",
+  "installmentMonths": 120,
+  "installmentDiscountPercentage": 100,
+  "installmentDiscountTotal": 1000000000,
+  "offerDurationId": "string",
+  "offerDurationMonths": 120,
+  "offerDurationDiscountPercentage": 100,
+  "offerDurationDiscountTotal": 1000000000,
+  "projectStartDate": "string",
+  "paymentStartDate": "string",
+  "payDay": 28,
+  "status": "string",
+  "type": "ONE_TIME",
+  "subtotalPrice": 1000000000,
+  "totalPrice": 1000000000,
+  "createdAt": "string",
+  "updatedAt": "string",
+  "offerItems": [
+    {
+      "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "offerId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "productId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "priceId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "productType": "string",
+      "price": 0,
+      "quantity": 0,
+      "totalPrice": 0
+    }
+  ]
+}
+
+POST
+/offers/offer-duration
+
+Parameters
+Try it out
+Name	Description
+body
+object
+(body)
+Example Value
+Model
+{
+  "offerId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "offerDurationId": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+}
+Parameter content type
+
+application/json
+Responses
+Response content type
+
+application/json
+Code	Description
+200	
+Default Response
+
+Example Value
+Model
+{
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "leadId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "couponId": "string",
+  "couponDiscountPercentage": 100,
+  "couponDiscountTotal": 1000000000,
+  "installmentId": "string",
+  "installmentMonths": 120,
+  "installmentDiscountPercentage": 100,
+  "installmentDiscountTotal": 1000000000,
+  "offerDurationId": "string",
+  "offerDurationMonths": 120,
+  "offerDurationDiscountPercentage": 100,
+  "offerDurationDiscountTotal": 1000000000,
+  "projectStartDate": "string",
+  "paymentStartDate": "string",
+  "payDay": 28,
+  "status": "string",
+  "type": "ONE_TIME",
+  "subtotalPrice": 1000000000,
+  "totalPrice": 1000000000,
+  "createdAt": "string",
+  "updatedAt": "string",
+  "offerItems": [
+    {
+      "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "offerId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "productId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "priceId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "productType": "string",
+      "price": 0,
+      "quantity": 0,
+      "totalPrice": 0
+    }
+  ]
+}
+
+POST
+/offers/coupon
+
+Parameters
+Try it out
+Name	Description
+body
+object
+(body)
+Example Value
+Model
+{
+  "offerId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "couponCode": "string"
+}
+Parameter content type
+
+application/json
+Responses
+Response content type
+
+application/json
+Code	Description
+200	
+Default Response
+
+Example Value
+Model
+{
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "leadId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "couponId": "string",
+  "couponDiscountPercentage": 100,
+  "couponDiscountTotal": 1000000000,
+  "installmentId": "string",
+  "installmentMonths": 120,
+  "installmentDiscountPercentage": 100,
+  "installmentDiscountTotal": 1000000000,
+  "offerDurationId": "string",
+  "offerDurationMonths": 120,
+  "offerDurationDiscountPercentage": 100,
+  "offerDurationDiscountTotal": 1000000000,
+  "projectStartDate": "string",
+  "paymentStartDate": "string",
+  "payDay": 28,
+  "status": "string",
+  "type": "ONE_TIME",
+  "subtotalPrice": 1000000000,
+  "totalPrice": 1000000000,
+  "createdAt": "string",
+  "updatedAt": "string",
+  "offerItems": [
+    {
+      "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "offerId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "productId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "priceId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "productType": "string",
+      "price": 0,
+      "quantity": 0,
+      "totalPrice": 0
+    }
+  ]
+}
+
+POST
+/offers/installment
+
+Parameters
+Try it out
+Name	Description
+body
+object
+(body)
+Example Value
+Model
+{
+  "offerId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "installmentId": "string"
+}
+Parameter content type
+
+application/json
+Responses
+Response content type
+
+application/json
+Code	Description
+200	
+Default Response
+
+Example Value
+Model
+{
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "leadId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "couponId": "string",
+  "couponDiscountPercentage": 100,
+  "couponDiscountTotal": 1000000000,
+  "installmentId": "string",
+  "installmentMonths": 120,
+  "installmentDiscountPercentage": 100,
+  "installmentDiscountTotal": 1000000000,
+  "offerDurationId": "string",
+  "offerDurationMonths": 120,
+  "offerDurationDiscountPercentage": 100,
+  "offerDurationDiscountTotal": 1000000000,
+  "projectStartDate": "string",
+  "paymentStartDate": "string",
+  "payDay": 28,
+  "status": "string",
+  "type": "ONE_TIME",
+  "subtotalPrice": 1000000000,
+  "totalPrice": 1000000000,
+  "createdAt": "string",
+  "updatedAt": "string",
+  "offerItems": [
+    {
+      "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "offerId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "productId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "priceId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "productType": "string",
+      "price": 0,
+      "quantity": 0,
+      "totalPrice": 0
+    }
+  ]
+}
+Coupons
+
+
+POST
+/coupons
+
+Parameters
+Try it out
+Name	Description
+body
+object
+(body)
+Example Value
+Model
+{
+  "code": "string",
+  "discountPercentage": 100,
+  "type": "ONE_TIME"
+}
+Parameter content type
+
+application/json
+Responses
+Response content type
+
+application/json
+Code	Description
+200	
+Default Response
+
+Example Value
+Model
+{
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "code": "string",
+  "discountPercentage": 100,
+  "type": "ONE_TIME",
+  "usedOfferId": "string",
+  "createdAt": "string",
+  "updatedAt": "string"
+}
+
+GET
+/coupons
+
+Parameters
+Try it out
+No parameters
+
+Responses
+Response content type
+
+application/json
+Code	Description
+200	
+Default Response
+
+Example Value
+Model
+{
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "code": "string",
+  "discountPercentage": 100,
+  "type": "ONE_TIME",
+  "usedOfferId": "string",
+  "createdAt": "string",
+  "updatedAt": "string"
+}
+Leads
+
+
+GET
+/leads/{leadId}
+
+Parameters
+Try it out
+Name	Description
+leadId *
+string
+(path)
+leadId
+Responses
+Response content type
+
+application/json
+Code	Description
+200	
+Default Response
+
+Example Value
+Model
+{
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "name": "string",
+  "createdAt": "string",
+  "updatedAt": "string",
+  "leadExternalAccounts": [
+    {
+      "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "leadId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "platform": "string",
+      "platformId": "string",
+      "status": "string",
+      "createdAt": "string",
+      "updatedAt": "string"
+    }
+  ]
+}
+
+PUT
+/leads
+
+Parameters
+Try it out
+Name	Description
+body
+object
+(body)
+Example Value
+Model
+{
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "name": "string"
+}
+Parameter content type
+
+application/json
+Responses
+Response content type
+
+application/json
+Code	Description
+200	
+Default Response
+
+Example Value
+Model
+{
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "name": "string",
+  "createdAt": "string",
+  "updatedAt": "string",
+  "leadExternalAccounts": [
+    {
+      "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "leadId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "platform": "string",
+      "platformId": "string",
+      "status": "string",
+      "createdAt": "string",
+      "updatedAt": "string"
+    }
+  ]
+}
+
+PUT
+/leads/external-accounts
+
+Parameters
+Try it out
+Name	Description
+body
+object
+(body)
+Example Value
+Model
+{
+  "leadId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "accountId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "platformId": "string"
+}
+Parameter content type
+
+application/json
+Responses
+Response content type
+
+application/json
+Code	Description
+200	
+Default Response
+
+Example Value
+Model
+{
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "name": "string",
+  "createdAt": "string",
+  "updatedAt": "string",
+  "leadExternalAccounts": [
+    {
+      "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "leadId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "platform": "string",
+      "platformId": "string",
+      "status": "string",
+      "createdAt": "string",
+      "updatedAt": "string"
+    }
+  ]
+}
+Offer Durations
+
+
+POST
+/offer-durations
+
+Parameters
+Try it out
+Name	Description
+body
+object
+(body)
+Example Value
+Model
+{
+  "months": 120,
+  "discountPercentage": 100
+}
+Parameter content type
+
+application/json
+Responses
+Response content type
+
+application/json
+Code	Description
+201	
+Default Response
+
+Example Value
+Model
+{
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "months": 120,
+  "discountPercentage": 100,
+  "createdAt": "string",
+  "updatedAt": "string"
+}
+
+GET
+/offer-durations
+
+Parameters
+Try it out
+No parameters
+
+Responses
+Response content type
+
+application/json
+Code	Description
+200	
+Default Response
+
+Example Value
+Model
+[
+  {
+    "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "months": 120,
+    "discountPercentage": 100,
+    "createdAt": "string",
+    "updatedAt": "string"
+  }
+]
+
+GET
+/offer-durations/{offerDurationId}
+
+Parameters
+Try it out
+Name	Description
+offerDurationId *
+string
+(path)
+offerDurationId
+Responses
+Response content type
+
+application/json
+Code	Description
+200	
+Default Response
+
+Example Value
+Model
+{
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "months": 120,
+  "discountPercentage": 100,
+  "createdAt": "string",
+  "updatedAt": "string"
+}
+Installments
+
+
+POST
+/installments
+
+Parameters
+Try it out
+Name	Description
+body
+object
+(body)
+Example Value
+Model
+{
+  "installment": 1,
+  "discountPercentage": 100,
+  "paymentMethodId": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+}
+Parameter content type
+
+application/json
+Responses
+Response content type
+
+application/json
+Code	Description
+200	
+Default Response
+
+Example Value
+Model
+{
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "installment": 1,
+  "discountPercentage": 100,
+  "paymentMethodId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "createdAt": "string",
+  "updatedAt": "string"
+}
+
+GET
+/installments
+
+Parameters
+Try it out
+No parameters
+
+Responses
+Response content type
+
+application/json
+Code	Description
+200	
+Default Response
+
+Example Value
+Model
+[
+  {
+    "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "installment": 1,
+    "discountPercentage": 100,
+    "paymentMethodId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "createdAt": "string",
+    "updatedAt": "string"
+  }
+]
+PaymentMethods
+
+
+POST
+/payment-methods
+
+Parameters
+Try it out
+Name	Description
+body
+object
+(body)
+Example Value
+Model
+{
+  "name": "string",
+  "description": "string",
+  "code": "string"
+}
+Parameter content type
+
+application/json
+Responses
+Response content type
+
+application/json
+Code	Description
+201	
+Default Response
+
+Example Value
+Model
+{
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "name": "string",
+  "description": "string",
+  "code": "string",
+  "createdAt": "string",
+  "updatedAt": "string"
+}
+
+GET
+/payment-methods
+
+Parameters
+Try it out
+No parameters
+
+Responses
+Response content type
+
+application/json
+Code	Description
+200	
+Default Response
+
+Example Value
+Model
+[
+  {
+    "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "name": "string",
+    "description": "string",
+    "code": "string",
+    "createdAt": "string",
+    "updatedAt": "string"
+  }
+]
+
+https://api.catalog.dev.mktlab.app/documentation/json
+Explore
+@fastify/swagger
+ 9.5.1 
+OAS 2.0
+https://api.catalog.dev.mktlab.app/documentation/json
+Products
+
+
+POST
+/products
+
+Parameters
+Try it out
+Name	Description
+body
+object
+(body)
+Example Value
+Model
+{
+  "name": "string",
+  "description": "string",
+  "paymentType": "ONE_TIME",
+  "singleItemOnly": true,
+  "categoryId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "createdBy": "string"
+}
+Parameter content type
+
+application/json
+Responses
+Response content type
+
+application/json
+Code	Description
+201	
+Default Response
+
+Example Value
+Model
+{
+  "id": "string",
+  "name": "string",
+  "description": "string",
+  "paymentType": "string",
+  "status": "string",
+  "singleItemOnly": true,
+  "categoryId": "string",
+  "prices": [
+    {
+      "amount": 0,
+      "currencyId": "string",
+      "modifierTypeId": "Unknown Type: string,null"
+    }
+  ],
+  "deliverables": [
+    {
+      "id": "string",
+      "productId": "string",
+      "createdAt": "string",
+      "updatedAt": "string"
+    }
+  ],
+  "guidelines": [
+    {
+      "id": "string",
+      "name": "string",
+      "description": "string",
+      "productId": "string",
+      "createdAt": "string",
+      "updatedAt": "string"
+    }
+  ],
+  "createdBy": "string",
+  "createdAt": "string",
+  "updatedAt": "string"
+}
+
+GET
+/products
+
+Parameters
+Try it out
+No parameters
+
+Responses
+Response content type
+
+application/json
+Code	Description
+200	
+Default Response
+
+Example Value
+Model
+{
+  "id": "string",
+  "name": "string",
+  "description": "string",
+  "paymentType": "string",
+  "status": "string",
+  "singleItemOnly": true,
+  "categoryId": "string",
+  "prices": [
+    {
+      "amount": 0,
+      "currencyId": "string",
+      "modifierTypeId": "Unknown Type: string,null"
+    }
+  ],
+  "deliverables": [
+    {
+      "id": "string",
+      "productId": "string",
+      "createdAt": "string",
+      "updatedAt": "string"
+    }
+  ],
+  "guidelines": [
+    {
+      "id": "string",
+      "name": "string",
+      "description": "string",
+      "productId": "string",
+      "createdAt": "string",
+      "updatedAt": "string"
+    }
+  ],
+  "createdBy": "string",
+  "createdAt": "string",
+  "updatedAt": "string"
+}
+
+PUT
+/products/{id}
+
+Parameters
+Try it out
+Name	Description
+body
+object
+(body)
+Example Value
+Model
+{
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "name": "string",
+  "description": "string",
+  "paymentType": "ONE_TIME",
+  "status": "ACTIVE",
+  "singleItemOnly": true,
+  "categoryId": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+}
+Parameter content type
+
+application/json
+id *
+string
+(path)
+id
+Responses
+Response content type
+
+application/json
+Code	Description
+200	
+Default Response
+
+Example Value
+Model
+{
+  "id": "string",
+  "name": "string",
+  "description": "string",
+  "paymentType": "string",
+  "status": "string",
+  "singleItemOnly": true,
+  "categoryId": "string",
+  "prices": [
+    {
+      "amount": 0,
+      "currencyId": "string",
+      "modifierTypeId": "Unknown Type: string,null"
+    }
+  ],
+  "deliverables": [
+    {
+      "id": "string",
+      "productId": "string",
+      "createdAt": "string",
+      "updatedAt": "string"
+    }
+  ],
+  "guidelines": [
+    {
+      "id": "string",
+      "name": "string",
+      "description": "string",
+      "productId": "string",
+      "createdAt": "string",
+      "updatedAt": "string"
+    }
+  ],
+  "createdBy": "string",
+  "createdAt": "string",
+  "updatedAt": "string"
+}
+
+GET
+/products/find/{id}
+
+Parameters
+Try it out
+Name	Description
+id *
+string
+(path)
+id
+Responses
+Response content type
+
+application/json
+Code	Description
+200	
+Default Response
+
+Example Value
+Model
+{
+  "id": "string",
+  "name": "string",
+  "description": "string",
+  "paymentType": "string",
+  "status": "string",
+  "singleItemOnly": true,
+  "categoryId": "string",
+  "prices": [
+    {
+      "amount": 0,
+      "currencyId": "string",
+      "modifierTypeId": "Unknown Type: string,null"
+    }
+  ],
+  "deliverables": [
+    {
+      "id": "string",
+      "productId": "string",
+      "createdAt": "string",
+      "updatedAt": "string"
+    }
+  ],
+  "guidelines": [
+    {
+      "id": "string",
+      "name": "string",
+      "description": "string",
+      "productId": "string",
+      "createdAt": "string",
+      "updatedAt": "string"
+    }
+  ],
+  "createdBy": "string",
+  "createdAt": "string",
+  "updatedAt": "string"
+}
+
+POST
+/products/prices
+
+Parameters
+Try it out
+Name	Description
+body
+object
+(body)
+Example Value
+Model
+{
+  "productId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "currencyId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "amount": 0,
+  "modifierTypeId": "string"
+}
+Parameter content type
+
+application/json
+Responses
+Response content type
+
+application/json
+Code	Description
+201	
+Default Response
+
+Example Value
+Model
+{
+  "id": "string",
+  "name": "string",
+  "description": "string",
+  "paymentType": "string",
+  "status": "string",
+  "singleItemOnly": true,
+  "categoryId": "string",
+  "prices": [
+    {
+      "amount": 0,
+      "currencyId": "string",
+      "modifierTypeId": "Unknown Type: string,null"
+    }
+  ],
+  "deliverables": [
+    {
+      "id": "string",
+      "productId": "string",
+      "createdAt": "string",
+      "updatedAt": "string"
+    }
+  ],
+  "guidelines": [
+    {
+      "id": "string",
+      "name": "string",
+      "description": "string",
+      "productId": "string",
+      "createdAt": "string",
+      "updatedAt": "string"
+    }
+  ],
+  "createdBy": "string",
+  "createdAt": "string",
+  "updatedAt": "string"
+}
+
+PUT
+/products/prices
+
+Parameters
+Try it out
+Name	Description
+body
+object
+(body)
+Example Value
+Model
+{
+  "productId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "priceId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "amount": 0
+}
+Parameter content type
+
+application/json
+Responses
+Response content type
+
+application/json
+Code	Description
+200	
+Default Response
+
+Example Value
+Model
+{
+  "id": "string",
+  "name": "string",
+  "description": "string",
+  "paymentType": "string",
+  "status": "string",
+  "singleItemOnly": true,
+  "categoryId": "string",
+  "prices": [
+    {
+      "amount": 0,
+      "currencyId": "string",
+      "modifierTypeId": "Unknown Type: string,null"
+    }
+  ],
+  "deliverables": [
+    {
+      "id": "string",
+      "productId": "string",
+      "createdAt": "string",
+      "updatedAt": "string"
+    }
+  ],
+  "guidelines": [
+    {
+      "id": "string",
+      "name": "string",
+      "description": "string",
+      "productId": "string",
+      "createdAt": "string",
+      "updatedAt": "string"
+    }
+  ],
+  "createdBy": "string",
+  "createdAt": "string",
+  "updatedAt": "string"
+}
+
+DELETE
+/products/{productId}/prices/{priceId}
+
+Parameters
+Try it out
+Name	Description
+productId *
+string
+(path)
+productId
+priceId *
+string
+(path)
+priceId
+Responses
+Response content type
+
+application/json
+Code	Description
+200	
+Default Response
+
+Example Value
+Model
+{
+  "id": "string",
+  "name": "string",
+  "description": "string",
+  "paymentType": "string",
+  "status": "string",
+  "singleItemOnly": true,
+  "categoryId": "string",
+  "prices": [
+    {
+      "amount": 0,
+      "currencyId": "string",
+      "modifierTypeId": "Unknown Type: string,null"
+    }
+  ],
+  "deliverables": [
+    {
+      "id": "string",
+      "productId": "string",
+      "createdAt": "string",
+      "updatedAt": "string"
+    }
+  ],
+  "guidelines": [
+    {
+      "id": "string",
+      "name": "string",
+      "description": "string",
+      "productId": "string",
+      "createdAt": "string",
+      "updatedAt": "string"
+    }
+  ],
+  "createdBy": "string",
+  "createdAt": "string",
+  "updatedAt": "string"
+}
+
+DELETE
+/products/{productId}/deliverables/{deliverableId}
+
+Parameters
+Try it out
+Name	Description
+productId *
+string
+(path)
+productId
+deliverableId *
+string
+(path)
+deliverableId
+Responses
+Response content type
+
+application/json
+Code	Description
+200	
+Default Response
+
+Example Value
+Model
+{
+  "id": "string",
+  "name": "string",
+  "description": "string",
+  "paymentType": "string",
+  "status": "string",
+  "singleItemOnly": true,
+  "categoryId": "string",
+  "prices": [
+    {
+      "amount": 0,
+      "currencyId": "string",
+      "modifierTypeId": "Unknown Type: string,null"
+    }
+  ],
+  "deliverables": [
+    {
+      "id": "string",
+      "productId": "string",
+      "createdAt": "string",
+      "updatedAt": "string"
+    }
+  ],
+  "guidelines": [
+    {
+      "id": "string",
+      "name": "string",
+      "description": "string",
+      "productId": "string",
+      "createdAt": "string",
+      "updatedAt": "string"
+    }
+  ],
+  "createdBy": "string",
+  "createdAt": "string",
+  "updatedAt": "string"
+}
+
+POST
+/products/deliverables
+
+Parameters
+Try it out
+Name	Description
+body
+object
+(body)
+Example Value
+Model
+{
+  "productId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "deliverableId": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+}
+Parameter content type
+
+application/json
+Responses
+Response content type
+
+application/json
+Code	Description
+201	
+Default Response
+
+Example Value
+Model
+{
+  "id": "string",
+  "name": "string",
+  "description": "string",
+  "paymentType": "string",
+  "status": "string",
+  "singleItemOnly": true,
+  "categoryId": "string",
+  "prices": [
+    {
+      "amount": 0,
+      "currencyId": "string",
+      "modifierTypeId": "Unknown Type: string,null"
+    }
+  ],
+  "deliverables": [
+    {
+      "id": "string",
+      "productId": "string",
+      "createdAt": "string",
+      "updatedAt": "string"
+    }
+  ],
+  "guidelines": [
+    {
+      "id": "string",
+      "name": "string",
+      "description": "string",
+      "productId": "string",
+      "createdAt": "string",
+      "updatedAt": "string"
+    }
+  ],
+  "createdBy": "string",
+  "createdAt": "string",
+  "updatedAt": "string"
+}
+
+DELETE
+/products/{productId}/guidelines/{guidelineId}
+
+Parameters
+Try it out
+Name	Description
+productId *
+string
+(path)
+productId
+guidelineId *
+string
+(path)
+guidelineId
+Responses
+Response content type
+
+application/json
+Code	Description
+200	
+Default Response
+
+Example Value
+Model
+{
+  "id": "string",
+  "name": "string",
+  "description": "string",
+  "paymentType": "string",
+  "status": "string",
+  "singleItemOnly": true,
+  "categoryId": "string",
+  "prices": [
+    {
+      "amount": 0,
+      "currencyId": "string",
+      "modifierTypeId": "Unknown Type: string,null"
+    }
+  ],
+  "deliverables": [
+    {
+      "id": "string",
+      "productId": "string",
+      "createdAt": "string",
+      "updatedAt": "string"
+    }
+  ],
+  "guidelines": [
+    {
+      "id": "string",
+      "name": "string",
+      "description": "string",
+      "productId": "string",
+      "createdAt": "string",
+      "updatedAt": "string"
+    }
+  ],
+  "createdBy": "string",
+  "createdAt": "string",
+  "updatedAt": "string"
+}
+
+POST
+/products/guidelines
+
+Parameters
+Try it out
+Name	Description
+body
+object
+(body)
+Example Value
+Model
+{
+  "description": "string",
+  "name": "string",
+  "productId": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+}
+Parameter content type
+
+application/json
+Responses
+Response content type
+
+application/json
+Code	Description
+201	
+Default Response
+
+Example Value
+Model
+{
+  "id": "string",
+  "name": "string",
+  "description": "string",
+  "paymentType": "string",
+  "status": "string",
+  "singleItemOnly": true,
+  "categoryId": "string",
+  "prices": [
+    {
+      "amount": 0,
+      "currencyId": "string",
+      "modifierTypeId": "Unknown Type: string,null"
+    }
+  ],
+  "deliverables": [
+    {
+      "id": "string",
+      "productId": "string",
+      "createdAt": "string",
+      "updatedAt": "string"
+    }
+  ],
+  "guidelines": [
+    {
+      "id": "string",
+      "name": "string",
+      "description": "string",
+      "productId": "string",
+      "createdAt": "string",
+      "updatedAt": "string"
+    }
+  ],
+  "createdBy": "string",
+  "createdAt": "string",
+  "updatedAt": "string"
+}
+Categories
+
+
+POST
+/categories
+
+Parameters
+Try it out
+Name	Description
+body
+object
+(body)
+Example Value
+Model
+{
+  "name": "string",
+  "description": "string",
+  "createdBy": "string"
+}
+Parameter content type
+
+application/json
+Responses
+Response content type
+
+application/json
+Code	Description
+201	
+Default Response
+
+Example Value
+Model
+{
+  "id": "string",
+  "name": "string",
+  "description": "string",
+  "status": "string",
+  "createdBy": "string",
+  "createdAt": "string",
+  "updatedAt": "string"
+}
+
+GET
+/categories
+
+Parameters
+Try it out
+No parameters
+
+Responses
+Response content type
+
+application/json
+Code	Description
+200	
+Default Response
+
+Example Value
+Model
+[
+  {
+    "id": "string",
+    "name": "string",
+    "description": "string",
+    "status": "string",
+    "createdBy": "string",
+    "createdAt": "string",
+    "updatedAt": "string"
+  }
+]
+
+GET
+/categories/{id}
+
+Parameters
+Try it out
+Name	Description
+id *
+string
+(path)
+id
+Responses
+Response content type
+
+application/json
+Code	Description
+200	
+Default Response
+
+Example Value
+Model
+{
+  "id": "string",
+  "name": "string",
+  "description": "string",
+  "status": "string",
+  "createdBy": "string",
+  "createdAt": "string",
+  "updatedAt": "string"
+}
+Currencies
+
+
+POST
+/currencies
+
+Parameters
+Try it out
+Name	Description
+body
+object
+(body)
+Example Value
+Model
+{
+  "name": "string",
+  "symbol": "string",
+  "code": "string"
+}
+Parameter content type
+
+application/json
+Responses
+Response content type
+
+application/json
+Code	Description
+201	
+Default Response
+
+Example Value
+Model
+{
+  "id": "string",
+  "name": "string",
+  "symbol": "string",
+  "code": "string",
+  "createdAt": "string",
+  "updatedAt": "string"
+}
+
+GET
+/currencies
+
+Parameters
+Try it out
+No parameters
+
+Responses
+Response content type
+
+application/json
+Code	Description
+200	
+Default Response
+
+Example Value
+Model
+[
+  {
+    "id": "string",
+    "name": "string",
+    "symbol": "string",
+    "code": "string",
+    "createdAt": "string",
+    "updatedAt": "string"
+  }
+]
+Deliverables
+
+
+POST
+/deliverables
+
+Parameters
+Try it out
+Name	Description
+body
+object
+(body)
+Example Value
+Model
+{
+  "name": "string",
+  "description": "string"
+}
+Parameter content type
+
+application/json
+Responses
+Response content type
+
+application/json
+Code	Description
+201	
+Default Response
+
+Example Value
+Model
+{
+  "id": "string",
+  "name": "string",
+  "description": "string",
+  "createdAt": "string",
+  "updatedAt": "string"
+}
+
+GET
+/deliverables
+
+Parameters
+Try it out
+No parameters
+
+Responses
+Response content type
+
+application/json
+Code	Description
+200	
+Default Response
+
+Example Value
+Model
+[
+  {
+    "id": "string",
+    "name": "string",
+    "description": "string",
+    "createdAt": "string",
+    "updatedAt": "string"
+  }
+]
+
+DELETE
+/deliverables/{id}
+
+Parameters
+Try it out
+Name	Description
+body
+object
+(body)
+Example Value
+Model
+{
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+}
+Parameter content type
+
+application/json
+id *
+string
+(path)
+id
+Responses
+Response content type
+
+application/json
+Code	Description
+200	
+Default Response
+
+Modifier Types
+
+
+POST
+/modifier-types
+
+Parameters
+Try it out
+Name	Description
+body
+object
+(body)
+Example Value
+Model
+{
+  "key": "string",
+  "displayName": "string",
+  "description": "string",
+  "createdBy": "string"
+}
+Parameter content type
+
+application/json
+Responses
+Response content type
+
+application/json
+Code	Description
+201	
+Default Response
+
+Example Value
+Model
+{
+  "id": "string",
+  "key": "string",
+  "displayName": "string",
+  "description": "string",
+  "createdBy": "string",
+  "createdAt": "string",
+  "updatedAt": "string"
+}
+
+GET
+/modifier-types
+
+Parameters
+Try it out
+No parameters
+
+Responses
+Response content type
+
+application/json
+Code	Description
+200	
+Default Response
+
+Example Value
+Model
+{
+  "id": "string",
+  "key": "string",
+  "displayName": "string",
+  "description": "string",
+  "createdBy": "string",
+  "createdAt": "string",
+  "updatedAt": "string"
+}
+PUT
+/sessions/{sessionId}/close
+
+Parameters
+Try it out
+Name	Description
+sessionId *
+string
+(path)
+sessionId
+Responses
+Response content type
+
+application/json
+Code	Description
+200	
+Default Response
+
+Example Value
+Model
+{
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "leadId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "oneTimeOfferId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "recurrentOfferId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "status": "string",
+  "isActive": true,
+  "expiresAt": "string",
+  "createdAt": "string",
+  "updatedAt": "string"
+}
