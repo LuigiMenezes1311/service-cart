@@ -1,9 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { salesApi } from '@/services/api'
 
-const SALES_API_URL = process.env.NEXT_PUBLIC_API_URL
+const API_SALES_URL = process.env.NEXT_PUBLIC_API_SALES_URL
 
 export async function POST(req: NextRequest) {
+  if (!API_SALES_URL) {
+    return NextResponse.json(
+      { error: 'API URL não configurada' },
+      { status: 500 }
+    )
+  }
+
   try {
     const body = await req.json()
     const { offerId, installmentId } = body

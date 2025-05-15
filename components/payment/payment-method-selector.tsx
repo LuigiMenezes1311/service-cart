@@ -18,9 +18,11 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { CreditCard, Wallet, Building, Plus, Trash2, Calendar } from "lucide-react"
+import { CreditCard, Wallet, Building, Plus, Trash2, Calendar, Receipt } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
+import { PaymentMethod as PaymentMethodType } from "@/types/payment"
+import { cn } from "@/lib/utils"
 
 const paymentMethodIcons = {
   "credit-card": <CreditCard className="h-5 w-5" />,
@@ -28,10 +30,81 @@ const paymentMethodIcons = {
   "digital-wallet": <Wallet className="h-5 w-5" />,
   "bank-transfer": <Building className="h-5 w-5" />,
   pix: <Wallet className="h-5 w-5" />,
-  boleto: <Building className="h-5 w-5" />,
+  boleto: <Receipt className="h-5 w-5" />,
 }
 
-export function PaymentMethodSelector() {
+interface PaymentMethodSelectorProps {
+  title: string
+  subtitle: string
+  paymentMethods: PaymentMethodType[]
+  selectedMethodId: string | null
+  onMethodSelect: (methodId: string) => void
+  isRecurring?: boolean
+  className?: string
+}
+
+export function PaymentMethodSelector({
+  title,
+  subtitle,
+  paymentMethods,
+  selectedMethodId,
+  onMethodSelect,
+  isRecurring = false,
+  className
+}: PaymentMethodSelectorProps) {
+  return (
+    <div className={cn("rounded-lg bg-white p-6 shadow-sm", className)}>
+      <div className="mb-4">
+        <h3 className="text-lg font-semibold">{title}</h3>
+        <p className="text-sm text-gray-500">{subtitle}</p>
+      </div>
+
+      <RadioGroup
+        value={selectedMethodId || ""}
+        onValueChange={onMethodSelect}
+        className="grid gap-4"
+      >
+        {paymentMethods.map((method) => (
+          <div key={method.id}>
+            <RadioGroupItem
+              value={method.id}
+              id={method.id}
+              className="peer sr-only"
+            />
+            <Label
+              htmlFor={method.id}
+              className="flex items-center justify-between rounded-lg border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
+            >
+              <div className="flex items-center gap-3">
+                {method.code === "credit-card" && <CreditCard className="h-5 w-5" />}
+                {method.code === "boleto" && <Receipt className="h-5 w-5" />}
+                {method.code === "pix" && <Wallet className="h-5 w-5" />}
+                <div className="space-y-1">
+                  <p className="text-sm font-medium leading-none">{method.name}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {method.description}
+                  </p>
+                  {isRecurring && method.supportsRecurring && (
+                    <Badge variant="outline" className="mt-1">
+                      Suporta pagamento recorrente
+                    </Badge>
+                  )}
+                </div>
+              </div>
+              {method.discount > 0 && (
+                <Badge variant="secondary" className="ml-2">
+                  {method.discount * 100}% OFF
+                </Badge>
+              )}
+            </Label>
+          </div>
+        ))}
+      </RadioGroup>
+    </div>
+  )
+}
+
+export function PaymentMethodSelectorOld() {
   const {
     selectedPaymentMethod,
     setSelectedPaymentMethod,
