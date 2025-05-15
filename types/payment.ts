@@ -127,22 +127,22 @@ export interface OfferItem {
 export interface Offer {
   id: string
   leadId: string
-  couponId: string
+  couponId: string | null
   couponDiscountPercentage: number
   couponDiscountTotal: number
-  installmentId: string
+  installmentId: string | null
   installmentMonths: number
   installmentDiscountPercentage: number
   installmentDiscountTotal: number
-  offerDurationId: string
+  offerDurationId: string | null
   offerDurationMonths: number
   offerDurationDiscountPercentage: number
   offerDurationDiscountTotal: number
-  projectStartDate: string
-  paymentStartDate: string
-  payDay: number
+  projectStartDate: string | null
+  paymentStartDate: string | null
+  payDay: number | null
   status: string
-  type: "ONE_TIME" | "RECURRENT"
+  type: 'ONE_TIME' | 'RECURRENT'
   subtotalPrice: number
   totalPrice: number
   createdAt: string
@@ -180,8 +180,8 @@ export interface Coupon {
   id: string
   code: string
   discountPercentage: number
-  type: "ONE_TIME" | "RECURRENT"
-  usedOfferId: string
+  type: 'ONE_TIME' | 'RECURRENT'
+  usedOfferId: string | null
   createdAt: string
   updatedAt: string
 }

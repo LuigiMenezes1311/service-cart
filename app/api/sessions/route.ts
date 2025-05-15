@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { salesApi } from '@/services/api'
 
 const SALES_API_URL = process.env.NEXT_PUBLIC_API_URL
 
@@ -14,30 +15,12 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const apiResponse = await fetch(`${SALES_API_URL}/sessions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        // Adicione quaisquer outros cabeçalhos necessários aqui (ex: Authorization)
-      },
-      body: JSON.stringify({ name, salesforceLeadId }),
-    })
-
-    if (!apiResponse.ok) {
-      const errorData = await apiResponse.json()
-      console.error('Erro da API ao criar sessão:', errorData)
-      return NextResponse.json(
-        { error: errorData.message || 'Falha ao criar sessão na API externa' },
-        { status: apiResponse.status }
-      )
-    }
-
-    const sessionData = await apiResponse.json()
-    return NextResponse.json(sessionData, { status: 200 })
+    const session = await salesApi.createSession(name, salesforceLeadId)
+    return NextResponse.json(session)
   } catch (error) {
-    console.error('Erro interno ao processar /api/sessions POST:', error)
+    console.error('Error creating session:', error)
     return NextResponse.json(
-      { error: 'Erro interno do servidor' },
+      { error: 'Failed to create session' },
       { status: 500 }
     )
   }
@@ -45,39 +28,36 @@ export async function POST(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url)
-  const leadId = url.searchParams.get('leadId')
+  const searchParams = url.searchParams
+  const leadId = searchParams.get('leadId')
+  const sessionId = searchParams.get('sessionId')
 
-  if (!leadId) {
-    return NextResponse.json(
-      { error: 'ID do lead é obrigatório' },
-      { status: 400 }
-    )
-  }
-
-  try {
-    const apiResponse = await fetch(`${SALES_API_URL}/sessions/lead/${leadId}`, {
-      method: 'GET',
-      headers: {
-        // Adicione quaisquer outros cabeçalhos necessários aqui (ex: Authorization)
-      },
-    })
-
-    if (!apiResponse.ok) {
-      const errorData = await apiResponse.json()
-      console.error('Erro da API ao buscar sessão por leadId:', errorData)
+  if (leadId) {
+    try {
+      const session = await salesApi.getSessionByLeadId(leadId)
+      return NextResponse.json(session)
+    } catch (error) {
+      console.error('Erro interno ao processar /api/sessions GET (by leadId):', error)
       return NextResponse.json(
-        { error: errorData.message || 'Falha ao buscar sessão na API externa' },
-        { status: apiResponse.status }
+        { error: 'Erro interno do servidor' },
+        { status: 500 }
       )
     }
-
-    const sessionData = await apiResponse.json()
-    return NextResponse.json(sessionData, { status: 200 })
-  } catch (error) {
-    console.error('Erro interno ao processar /api/sessions GET (by leadId):', error)
+  } else if (sessionId) {
+    try {
+      const session = await salesApi.getSessionById(sessionId)
+      return NextResponse.json(session)
+    } catch (error) {
+      console.error('Erro interno ao processar /api/sessions GET (by sessionId):', error)
+      return NextResponse.json(
+        { error: 'Erro interno do servidor' },
+        { status: 500 }
+      )
+    }
+  } else {
     return NextResponse.json(
-      { error: 'Erro interno do servidor' },
-      { status: 500 }
+      { error: 'Missing leadId or sessionId parameter' },
+      { status: 400 }
     )
   }
 } 

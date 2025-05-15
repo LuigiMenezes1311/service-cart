@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { salesApi } from '@/services/api'
 
 const SALES_API_URL = process.env.NEXT_PUBLIC_API_URL
 
@@ -14,36 +15,36 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const apiResponse = await fetch(`${SALES_API_URL}/offers/items`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        // Adicione outros cabeçalhos necessários (ex: Authorization)
-      },
-      body: JSON.stringify({ offerId, productId, priceId, quantity }),
-    })
+    const offer = await salesApi.addOfferItem(offerId, productId, priceId, quantity)
+    return NextResponse.json(offer)
+  } catch (error) {
+    console.error('Error adding offer item:', error)
+    return NextResponse.json(
+      { error: 'Failed to add offer item' },
+      { status: 500 }
+    )
+  }
+}
 
-    if (!apiResponse.ok) {
-      let errorData
-      try {
-        errorData = await apiResponse.json()
-      } catch (e) {
-        errorData = { message: apiResponse.statusText }
-      }
-      console.error('Erro da API ao adicionar item à oferta:', errorData)
+export async function DELETE(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url)
+    const offerId = searchParams.get('offerId')
+    const offerItemId = searchParams.get('offerItemId')
+
+    if (!offerId || !offerItemId) {
       return NextResponse.json(
-        { error: errorData.message || 'Falha ao adicionar item à oferta na API externa' },
-        { status: apiResponse.status }
+        { error: 'Missing offerId or offerItemId parameter' },
+        { status: 400 }
       )
     }
 
-    const responseData = await apiResponse.json()
-    return NextResponse.json(responseData, { status: 200 })
-
+    const offer = await salesApi.removeOfferItem(offerId, offerItemId)
+    return NextResponse.json(offer)
   } catch (error) {
-    console.error('Erro interno ao processar /api/offers/items POST:', error)
+    console.error('Error removing offer item:', error)
     return NextResponse.json(
-      { error: 'Erro interno do servidor' },
+      { error: 'Failed to remove offer item' },
       { status: 500 }
     )
   }

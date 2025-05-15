@@ -1,37 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-const SALES_API_URL = process.env.NEXT_PUBLIC_API_URL
+const API_SALES_URL = process.env.NEXT_PUBLIC_API_SALES_URL || 'https://api.sales.dev.mktlab.app'
 
 export async function GET(req: NextRequest) {
   try {
-    const apiResponse = await fetch(`${SALES_API_URL}/offer-durations`, {
-      method: 'GET',
-      headers: {
-        // Adicione quaisquer outros cabeçalhos necessários aqui (ex: Authorization)
-      },
-    })
-
-    if (!apiResponse.ok) {
-      let errorData
-      try {
-        errorData = await apiResponse.json()
-      } catch (e) {
-        errorData = { message: apiResponse.statusText }
-      }
-      console.error('Erro da API ao buscar durações de oferta:', errorData)
-      return NextResponse.json(
-        { error: errorData.message || 'Falha ao buscar durações de oferta na API externa' },
-        { status: apiResponse.status }
-      )
+    const response = await fetch(`${API_SALES_URL}/offer-durations`)
+    
+    if (!response.ok) {
+      throw new Error('Failed to fetch offer durations')
     }
 
-    const responseData = await apiResponse.json()
-    return NextResponse.json(responseData, { status: 200 })
-
+    const offerDurations = await response.json()
+    return NextResponse.json(offerDurations)
   } catch (error) {
-    console.error('Erro interno ao processar GET /api/offer-durations:', error)
+    console.error('Error fetching offer durations:', error)
     return NextResponse.json(
-      { error: 'Erro interno do servidor' },
+      { error: 'Failed to fetch offer durations' },
       { status: 500 }
     )
   }

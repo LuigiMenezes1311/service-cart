@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { salesApi } from '@/services/api'
 
 const SALES_API_URL = process.env.NEXT_PUBLIC_API_URL
 
@@ -9,41 +10,17 @@ export async function POST(req: NextRequest) {
 
     if (!offerId || !offerDurationId) {
       return NextResponse.json(
-        { error: 'offerId e offerDurationId são obrigatórios' },
+        { error: 'Missing offerId or offerDurationId parameter' },
         { status: 400 }
       )
     }
 
-    const apiResponse = await fetch(`${SALES_API_URL}/offers/offer-duration`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        // Adicione outros cabeçalhos (ex: Authorization)
-      },
-      body: JSON.stringify({ offerId, offerDurationId }),
-    })
-
-    if (!apiResponse.ok) {
-      let errorData
-      try {
-        errorData = await apiResponse.json()
-      } catch (e) {
-        errorData = { message: apiResponse.statusText }
-      }
-      console.error('Erro da API ao definir duração da oferta:', errorData)
-      return NextResponse.json(
-        { error: errorData.message || 'Falha ao definir duração da oferta na API externa' },
-        { status: apiResponse.status }
-      )
-    }
-
-    const responseData = await apiResponse.json()
-    return NextResponse.json(responseData, { status: 200 })
-
+    const offer = await salesApi.setOfferDuration(offerId, offerDurationId)
+    return NextResponse.json(offer)
   } catch (error) {
-    console.error('Erro interno ao processar POST /api/offers/offer-duration:', error)
+    console.error('Error setting offer duration:', error)
     return NextResponse.json(
-      { error: 'Erro interno do servidor' },
+      { error: 'Failed to set offer duration' },
       { status: 500 }
     )
   }
