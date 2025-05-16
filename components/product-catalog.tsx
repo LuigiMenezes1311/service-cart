@@ -7,7 +7,7 @@ import { ProductCard } from "@/components/product-card";
 import { useCart } from "@/context/cart-context";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Loader2, AlertTriangle, Search } from 'lucide-react';
+import { Loader2, AlertTriangle, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { V4XTeamBuilder } from "./V4XTeamBuilder";
 import { useToast } from "@/components/ui/use-toast";
 
@@ -26,7 +26,15 @@ export function ProductCatalog() {
 
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | "ALL">("ALL");
-  const [activeMainFilter, setActiveMainFilter] = useState<ActiveMainFilterType>("ALL"); // Novo estado
+  const [activeMainFilter, setActiveMainFilter] = useState<ActiveMainFilterType>("ALL");
+
+  // Estados para controle de categorias
+  const [showAllCategories, setShowAllCategories] = useState(false);
+  const CATEGORIES_DISPLAY_LIMIT = 5;
+
+  // Estados para paginação de produtos
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 9; // 3 colunas, 3 linhas por página
 
   const { addToCart, isInCart } = useCart();
   const { toast } = useToast();
@@ -123,6 +131,37 @@ export function ProductCatalog() {
       });
   }, [products, searchTerm, selectedCategoryId, activeMainFilter, v4xCategory]);
 
+  // Lógica de paginação para produtos
+  const paginatedProducts = useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    const endIndex = startIndex + ITEMS_PER_PAGE;
+    return filteredProducts.slice(startIndex, endIndex);
+  }, [filteredProducts, currentPage, ITEMS_PER_PAGE]);
+
+  const totalPages = useMemo(() => {
+    return Math.ceil(filteredProducts.length / ITEMS_PER_PAGE);
+  }, [filteredProducts, ITEMS_PER_PAGE]);
+
+  const handleNextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage(currentPage + 1);
+    }
+  };
+
+  const handlePreviousPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1);
+    }
+  };
+  
+  // Lógica para exibir categorias
+  const displayedCategories = useMemo(() => {
+    if (showAllCategories) {
+      return categories;
+    }
+    return categories.slice(0, CATEGORIES_DISPLAY_LIMIT);
+  }, [categories, showAllCategories, CATEGORIES_DISPLAY_LIMIT]);
+
   const mainFilters: { label: string; value: ActiveMainFilterType }[] = [
     { label: "Todos os serviços", value: "ALL" },
     { label: "Serviços recorrentes", value: "RECURRENT" },
@@ -212,7 +251,7 @@ export function ProductCatalog() {
             >
               Todas as Categorias
             </button>
-            {categories.map(category => (
+            {displayedCategories.map(category => (
               <button
                 key={category.id}
                 onClick={() => setSelectedCategoryId(category.id)}
@@ -225,6 +264,14 @@ export function ProductCatalog() {
                 {category.name}
               </button>
             ))}
+            {categories.length > CATEGORIES_DISPLAY_LIMIT && (
+              <button
+                onClick={() => setShowAllCategories(!showAllCategories)}
+                className="px-4 py-1.5 rounded-full text-sm font-medium text-red-600 hover:text-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+              >
+                {showAllCategories ? "Ver menos categorias" : `Ver mais ${categories.length - CATEGORIES_DISPLAY_LIMIT} categorias`}
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -251,7 +298,7 @@ export function ProductCatalog() {
 
       {activeMainFilter !== "V4X" && filteredProducts.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {filteredProducts.map(product => (
+          {paginatedProducts.map(product => (
             <ProductCard 
               key={product.id}
               product={product} 
@@ -268,6 +315,33 @@ export function ProductCatalog() {
           </svg>
           <h3 className="mt-2 text-lg font-medium text-gray-900">Nenhum serviço encontrado</h3>
           <p className="mt-1 text-sm text-gray-500">Tente ajustar seus filtros ou o termo de pesquisa.</p>
+        </div>
+      )}
+
+      {/* Controles de Paginação */} 
+      {activeMainFilter !== "V4X" && filteredProducts.length > ITEMS_PER_PAGE && (
+        <div className="mt-8 flex justify-center items-center space-x-4">
+          <Button
+            onClick={handlePreviousPage}
+            disabled={currentPage === 1}
+            variant="outline"
+            className="px-4 py-2 flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <ChevronLeft className="h-5 w-5 mr-2" />
+            Anterior
+          </Button>
+          <span className="text-sm text-gray-700">
+            Página {currentPage} de {totalPages}
+          </span>
+          <Button
+            onClick={handleNextPage}
+            disabled={currentPage === totalPages}
+            variant="outline"
+            className="px-4 py-2 flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Próximo
+            <ChevronRight className="h-5 w-5 ml-2" />
+          </Button>
         </div>
       )}
     </div>
