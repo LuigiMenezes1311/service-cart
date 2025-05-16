@@ -2,15 +2,18 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { getProducts, getCategories, getModifierTypes, getDeliverables } from "@/lib/api";
-import type { Product, Category, ModifierType, Deliverable, BaseProduct } from "@/types";
+import type { Product, Category, ModifierType, Deliverable, BaseProduct, Price } from "@/types";
 import { ProductCard } from "@/components/product-card";
 import { useCart } from "@/context/cart-context";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Loader2, AlertTriangle, Search } from 'lucide-react';
+import { V4XTeamBuilder } from "./V4XTeamBuilder";
+import { useToast } from "@/components/ui/use-toast";
 
 // Tipos para filtros
 type ServiceTypeFilter = "ALL" | "RECURRENT" | "ONE_TIME";
+type ActiveMainFilterType = ServiceTypeFilter | "V4X" | "VARIABLES"; // Novo tipo
 
 export function ProductCatalog() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -23,9 +26,10 @@ export function ProductCatalog() {
 
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | "ALL">("ALL");
-  const [serviceTypeFilter, setServiceTypeFilter] = useState<ServiceTypeFilter>("ALL");
+  const [activeMainFilter, setActiveMainFilter] = useState<ActiveMainFilterType>("ALL"); // Novo estado
 
   const { addToCart, isInCart } = useCart();
+  const { toast } = useToast();
 
   // Definindo loadData fora do useEffect para que possa ser chamada pelo botão "Tentar Novamente"
   const loadData = async () => {
@@ -74,24 +78,57 @@ export function ProductCatalog() {
     loadData();
   }, []);
 
+  const v4xCategory = useMemo(() => 
+    categories.find(cat => cat.name.toLowerCase() === 'v4x'),
+  [categories]);
+
+  const handleAddV4XToCart = (product: Product, price: Price) => {
+    if (price.modifierTypeId && price.amount !== undefined) {
+      const modifierDisplayName = modifierTypes.find(mt => mt.id === price.modifierTypeId)?.displayName || price.modifierTypeId || 'N/A';
+      addToCart(product, 1, price.modifierTypeId, price.amount);
+      toast({
+        title: "Produto adicionado",
+        description: `${product.name} (${modifierDisplayName}) foi adicionado ao carrinho.`,
+        className: "bg-green-100 border-green-300 text-green-800",
+        duration: 3000,
+      });
+    } else {
+      console.error("V4X Product ou Price inválido para adicionar ao carrinho", product, price);
+      toast({
+        title: "Erro ao adicionar",
+        description: "Não foi possível adicionar o produto V4X ao carrinho. Verifique os dados do produto.",
+        variant: "destructive",
+        duration: 5000,
+      });
+    }
+  };
+
   const filteredProducts = useMemo(() => {
+    if (activeMainFilter === "V4X" && v4xCategory) {
+      return []; // Não mostrar produtos normais se V4X estiver ativo e a categoria existir
+    }
     return products
       .filter(product => 
         product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         product.description.toLowerCase().includes(searchTerm.toLowerCase())
       )
       .filter(product => 
-        selectedCategoryId === "ALL" || product.categoryId === selectedCategoryId
+        activeMainFilter === "V4X" // Se V4X estiver ativo, não aplicar filtro de categoria ou tipo de serviço aqui
+          ? true 
+          : selectedCategoryId === "ALL" || product.categoryId === selectedCategoryId
       )
-      .filter(product => 
-        serviceTypeFilter === "ALL" || product.paymentType === serviceTypeFilter
-      );
-  }, [products, searchTerm, selectedCategoryId, serviceTypeFilter]);
+      .filter(product => {
+        if (activeMainFilter === "V4X" || activeMainFilter === "VARIABLES") return true; // Não aplicar filtro de paymentType para V4X e Variáveis aqui
+        return activeMainFilter === "ALL" || product.paymentType === activeMainFilter;
+      });
+  }, [products, searchTerm, selectedCategoryId, activeMainFilter, v4xCategory]);
 
-  const mainFilters: { label: string; value: ServiceTypeFilter }[] = [
+  const mainFilters: { label: string; value: ActiveMainFilterType }[] = [
     { label: "Todos os serviços", value: "ALL" },
     { label: "Serviços recorrentes", value: "RECURRENT" },
     { label: "Serviços pontuais", value: "ONE_TIME" },
+    { label: "V4X", value: "V4X" },
+    { label: "Variáveis", value: "VARIABLES" },
   ];
 
   if (isLoading) {
@@ -136,63 +173,83 @@ export function ProductCatalog() {
           {mainFilters.map((filter) => (
             <button
               key={filter.value}
-              onClick={() => setServiceTypeFilter(filter.value)}
+              onClick={() => {
+                setActiveMainFilter(filter.value);
+                // Resetar selectedCategoryId se sair do modo V4X ou de um filtro de tipo de serviço específico
+                if (filter.value !== "V4X") {
+                  setSelectedCategoryId("ALL"); 
+                }
+                // Se V4X for selecionado, podemos limpar o searchTerm ou outras coisas se necessário.
+                // Por enquanto, apenas mudar o filtro principal.
+              }}
               className={`py-2 px-4 rounded-md text-sm font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors
                 ${
-                  filter.value === "ALL"
-                    ? serviceTypeFilter === "ALL"
-                      ? "bg-[hsl(var(--custom-green-filter-bg))] text-foreground hover:bg-[hsl(var(--custom-green-filter-bg))] focus:ring-[hsl(var(--custom-green-filter-bg))]"
-                      : "bg-primary text-primary-foreground hover:bg-primary/90 focus:ring-primary"
-                    : serviceTypeFilter === filter.value
-                    ? "bg-primary text-primary-foreground hover:bg-primary/90 focus:ring-primary ring-2 ring-red-500 ring-offset-0"
-                    : "bg-primary text-primary-foreground hover:bg-primary/90 focus:ring-primary"
-                }`}
+                  activeMainFilter === filter.value
+                    ? filter.value === "V4X"
+                      ? "bg-[hsl(var(--custom-green-filter-bg))] text-foreground hover:bg-[hsl(var(--custom-green-filter-bg))] focus:ring-[hsl(var(--custom-green-filter-bg))]" // Estilo V4X ativo
+                      : "bg-primary text-primary-foreground hover:bg-primary/90 focus:ring-primary ring-2 ring-red-500 ring-offset-0" // Outros filtros ativos
+                    : filter.value === "VARIABLES" // Estilo para Variáveis (desabilitado por enquanto)
+                      ? "bg-primary text-primary-foreground opacity-60 cursor-not-allowed"
+                      : "bg-primary text-primary-foreground hover:bg-primary/90 focus:ring-primary" // Filtros inativos
+                }`
+              }
+              disabled={filter.value === "VARIABLES"} // Desabilitar "Variáveis" por agora
             >
               {filter.label}
             </button>
           ))}
-          <button
-            disabled
-            className="py-2 px-4 rounded-md text-sm font-medium bg-primary text-primary-foreground opacity-60 cursor-not-allowed"
-          >
-            V4X
-          </button>
-          <button
-            disabled
-            className="py-2 px-4 rounded-md text-sm font-medium bg-primary text-primary-foreground opacity-60 cursor-not-allowed"
-          >
-            Variáveis
-          </button>
         </div>
         
-        <div className="flex flex-wrap gap-3">
-          <button
-            onClick={() => setSelectedCategoryId("ALL")}
-            className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500
-              ${selectedCategoryId === "ALL"
-                ? "bg-gray-700 text-white hover:bg-gray-600"
-                : "bg-gray-200 text-gray-800 hover:bg-gray-300"
-              }`}
-          >
-            Todas as Categorias
-          </button>
-          {categories.map(category => (
+        {activeMainFilter !== "V4X" && ( // Ocultar filtros de categoria se V4X estiver ativo
+          <div className="flex flex-wrap gap-3">
             <button
-              key={category.id}
-              onClick={() => setSelectedCategoryId(category.id)}
+              onClick={() => setSelectedCategoryId("ALL")}
               className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500
-                ${selectedCategoryId === category.id
+                ${selectedCategoryId === "ALL"
                   ? "bg-gray-700 text-white hover:bg-gray-600"
                   : "bg-gray-200 text-gray-800 hover:bg-gray-300"
                 }`}
             >
-              {category.name}
+              Todas as Categorias
             </button>
-          ))}
-        </div>
+            {categories.map(category => (
+              <button
+                key={category.id}
+                onClick={() => setSelectedCategoryId(category.id)}
+                className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500
+                  ${selectedCategoryId === category.id
+                    ? "bg-gray-700 text-white hover:bg-gray-600"
+                    : "bg-gray-200 text-gray-800 hover:bg-gray-300"
+                  }`}
+              >
+                {category.name}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
-      {filteredProducts.length > 0 ? (
+      {activeMainFilter === "V4X" && v4xCategory && (
+        // Aqui entra o novo componente V4XTeamBuilder
+        <div className="my-8 p-6 bg-white rounded-lg shadow">
+          <h2 className="text-2xl font-semibold mb-4 text-gray-800 flex items-center">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7 mr-2 text-red-600" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z" />
+            </svg>
+            Monte sua equipe V4X
+          </h2>
+          <p className="text-gray-600 mb-6">Selecione colaboradores com diferentes níveis de senioridade para compor sua equipe ideal.</p>
+          <V4XTeamBuilder 
+              allProducts={products} 
+              v4xCategoryId={v4xCategory.id} 
+              allModifierTypes={modifierTypes}
+              onAddToCart={handleAddV4XToCart}
+              className="mt-2 mb-4"
+          />
+        </div>
+      )}
+
+      {activeMainFilter !== "V4X" && filteredProducts.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           {filteredProducts.map(product => (
             <ProductCard 
@@ -204,7 +261,7 @@ export function ProductCatalog() {
             />
           ))}
         </div>
-      ) : (
+      ) : activeMainFilter !== "V4X" && (
         <div className="text-center py-16 bg-white rounded-lg shadow">
           <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
             <path vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
