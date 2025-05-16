@@ -149,31 +149,35 @@ interface DateSelectionCardProps {
 }
 
 function DateSelectionCard({ title, description, value, onChange, minDate, isEditable }: DateSelectionCardProps) {
+  const inputId = useMemo(() => title.toLowerCase().replace(/\s+/g, '-'), [title]);
+
   return (
     <div className="border rounded-lg p-6 bg-white shadow-sm">
-      <h4 className="font-medium mb-5 flex items-center gap-2 text-center">
+      <div className="flex items-center gap-2 mb-3">
         <Calendar className="h-4 w-4 text-gray-900" />
-        {title}
-      </h4>
+        <label htmlFor={inputId} className="font-medium">{title}</label>
+      </div>
 
       {isEditable ? (
         <input
+          id={inputId}
+          name={inputId}
           type="date"
           className="w-full rounded-md border border-gray-300 p-3 shadow-sm focus:border-primary focus:ring-primary"
           min={minDate}
           value={value}
           onChange={(e) => onChange?.(e.target.value)}
-          aria-label={title}
         />
       ) : (
         <div className="flex items-center">
           <input
+            id={inputId}
+            name={inputId}
             type="text"
             className="w-full rounded-md border border-gray-200 bg-gray-50 p-3 text-gray-700 cursor-not-allowed"
             value={value}
             readOnly
             disabled
-            aria-label={title}
           />
         </div>
       )}
@@ -194,32 +198,33 @@ interface MonthlyPaymentDaySelectorProps {
 }
 
 function MonthlyPaymentDaySelector({ selectedDay, onChange }: MonthlyPaymentDaySelectorProps) {
-  // Available payment days
   const paymentDays = [5, 10, 15, 25]
 
   return (
     <div className="border rounded-lg p-6 bg-white shadow-sm mb-8">
       <h4 className="font-medium mb-5 text-center">Data de Pagamento Mensal</h4>
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-5">
-        {paymentDays.map((day) => (
-          <label
-            key={`day-${day}`}
-            className="flex flex-col p-4 border rounded-lg cursor-pointer hover:bg-gray-50 h-full"
-          >
-            <div className="flex items-start space-x-3">
+        {paymentDays.map((day) => {
+          const radioId = `payment-day-${day}`
+          return (
+            <div key={radioId} className="flex items-center p-4 border rounded-lg hover:bg-gray-50 cursor-pointer">
               <input
+                id={radioId}
                 type="radio"
-                name="payment-date"
-                className="mt-1"
+                name="payment-day-option"
+                className="h-4 w-4 text-primary focus:ring-primary border-gray-300"
                 checked={selectedDay === day}
                 onChange={() => onChange(day)}
               />
-              <div className="flex-1">
-                <p className="font-medium">Todo dia {day}</p>
-              </div>
+              <label
+                htmlFor={radioId}
+                className="ml-3 block text-sm font-medium text-gray-700 cursor-pointer"
+              >
+                Todo dia {day}
+              </label>
             </div>
-          </label>
-        ))}
+          )
+        })}
       </div>
     </div>
   )

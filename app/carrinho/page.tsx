@@ -13,6 +13,9 @@ import {
   ArrowRight,
   Trash2,
   AlertCircle,
+  CalendarDays,
+  ChevronDown,
+  ChevronUp
 } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
 import { useState, useEffect, useCallback, useMemo } from "react"
@@ -42,6 +45,14 @@ import {
   OfferDuration as ApiOfferDuration,
   Coupon as ApiCoupon
 } from "@/types/payment"
+import { ProjectDurationSelector } from "@/components/payment/project-duration-selector"
+import { 
+  IntegratedPaymentMethods, 
+  type PaymentMethod as UuPaymentMethod,
+  type Installment as UiInstallment
+} from "@/components/payment/integrated-payment-methods"
+import { PaymentSummary as NewPaymentSummary } from "@/components/payment/payment-summary"
+import { salesApi } from "@/services/api"
 
 // Helper function to generate a random order ID
 function generateOrderId() {
@@ -51,6 +62,14 @@ function generateOrderId() {
     result += chars.charAt(Math.floor(Math.random() * chars.length))
   }
   return result
+}
+
+// Helper function to generate a plausible Lead ID (UUID v4 format for simulation)
+function generateClientLeadId() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
 }
 
 // Format date to "Month DD, YYYY" format
@@ -115,9 +134,23 @@ const getInstallmentDiscount = (installments: number) => {
   return discounts[installments] || 0
 }
 
+// Helper function to get payment method icon
+const getPaymentMethodIcon = (methodCode: string) => {
+  switch (methodCode) {
+    case 'credit-card':
+      return <CreditCard className="h-5 w-5 mr-2 inline-block" />;
+    case 'boleto':
+      return <Receipt className="h-5 w-5 mr-2 inline-block" />;
+    case 'pix':
+      return <img src="/pix.svg" alt="PIX" className="h-5 w-5 mr-2 inline-block" />;
+    default:
+      return <Wallet className="h-5 w-5 mr-2 inline-block" />; // Ícone padrão
+  }
+};
+
 export default function CarrinhoPage() {
   const router = useRouter()
-  const { items, itemCount, isCartReady, removeFromCart } = useCart()
+  const { items, itemCount, isCartReady, removeFromCart, currentSession } = useCart()
   const [isCheckingOut, setIsCheckingOut] = useState(false)
   
   const [apiPaymentMethods, setApiPaymentMethods] = useState<ApiPaymentMethod[]>([]);
@@ -125,8 +158,8 @@ export default function CarrinhoPage() {
   const [apiInstallments, setApiInstallments] = useState<ApiInstallment[]>([]);
   const [isLoadingApiData, setIsLoadingApiData] = useState(true);
 
-  const [recurringPaymentMethod, setRecurringPaymentMethod] = useState<string | null>(null) 
-  const [oneTimePaymentMethod, setOneTimePaymentMethod] = useState<string | null>(null) 
+  const [recurringPaymentMethodId, setRecurringPaymentMethodId] = useState<string | null>(null);
+  const [oneTimePaymentMethodId, setOneTimePaymentMethodId] = useState<string | null>(null);
   
   const [selectedRecurringInstallmentId, setSelectedRecurringInstallmentId] = useState<string | null>(null);
   const [selectedOneTimeInstallmentId, setSelectedOneTimeInstallmentId] = useState<string | null>(null);
@@ -135,24 +168,11 @@ export default function CarrinhoPage() {
 
   const [activeStep, setActiveStep] = useState(0)
   const [pageReady, setPageReady] = useState(false)
-  const [recurringFrequency, setRecurringFrequency] = useState<
-    "monthly" | "quarterly" | "semi-annual" | "annual" | "installments"
-  >("monthly") 
   
-  const [cardOption, setCardOption] = useState<"recorrente" | "parcelado">("recorrente") 
-  const [oneTimeCardOption, setOneTimeCardOption] = useState<"a-vista" | "parcelado">("a-vista") 
-  const [isFidelizado, setIsFidelizado] = useState(false) 
-  const [boletoPixFrequency, setBoletoPixFrequency] = useState<PaymentFrequency>("recorrente") 
-  const [oneTimeBoletoPixFrequency, setOneTimeBoletoPixFrequency] = useState<PaymentFrequency>("a-vista") 
+  const [isFidelizado, setIsFidelizado] = useState(false);
 
-  const [recurringPaymentMethodSelected, setRecurringPaymentMethodSelected] = useState(false)
-  const [oneTimePaymentMethodSelected, setOneTimePaymentMethodSelected] = useState(false)
-  const [recurringInstallmentsSelected, setRecurringInstallmentsSelected] = useState(false) 
-  const [oneTimeInstallmentsSelected, setOneTimeInstallmentsSelected] = useState(false) 
-  const [projectDurationSelected, setProjectDurationSelected] = useState(false) 
-
-  const [recurringCouponCode, setRecurringCouponCode] = useState("")
-  const [oneTimeCouponCode, setOneTimeCouponCode] = useState("")
+  const [recurringCouponCode, setRecurringCouponCode] = useState("");
+  const [oneTimeCouponCode, setOneTimeCouponCode] = useState("");
   const [recurringCouponInfo, setRecurringCouponInfo] = useState<ApiCoupon | null>(null); 
   const [oneTimeCouponInfo, setOneTimeCouponInfo] = useState<ApiCoupon | null>(null); 
   const [applyingRecurringCoupon, setApplyingRecurringCoupon] = useState(false);
@@ -171,7 +191,7 @@ export default function CarrinhoPage() {
   const recurringItems = useMemo(() => items.filter((item) => item.paymentType === "RECURRENT"), [items])
   const oneTimeItems = useMemo(() => items.filter((item) => item.paymentType === "ONE_TIME"), [items])
 
-  const recurringSubtotal = useMemo(
+  const recurringMonthlySubtotal = useMemo(
     () => recurringItems.reduce((sum, item) => sum + (item.displayPrice || 0) * item.quantity, 0),
     [recurringItems],
   )
@@ -180,16 +200,6 @@ export default function CarrinhoPage() {
     () => oneTimeItems.reduce((sum, item) => sum + (item.displayPrice || 0) * item.quantity, 0),
     [oneTimeItems],
   )
-
-  const selectedRecurringPaymentMethodDetails = useMemo(
-    () => apiPaymentMethods.find(pm => pm.id === recurringPaymentMethod),
-    [apiPaymentMethods, recurringPaymentMethod]
-  );
-
-  const selectedOneTimePaymentMethodDetails = useMemo(
-    () => apiPaymentMethods.find(pm => pm.id === oneTimePaymentMethod),
-    [apiPaymentMethods, oneTimePaymentMethod]
-  );
   
   const selectedProjectDurationDetails = useMemo(
     () => apiOfferDurations.find(od => od.id === selectedProjectDurationId),
@@ -209,19 +219,50 @@ export default function CarrinhoPage() {
   const projectDurationDiscountPercentage = selectedProjectDurationDetails?.discountPercentage || 0;
   const recurringCouponDiscountPercentage = recurringCouponInfo?.discountPercentage || 0;
   const oneTimeCouponDiscountPercentage = oneTimeCouponInfo?.discountPercentage || 0;
-  // Fim do bloco de useMemo
+
+  // Mapear ApiPaymentMethod para UiPaymentMethod para IntegratedPaymentMethods
+  const uiPaymentMethods: UuPaymentMethod[] = useMemo(() => 
+    apiPaymentMethods.map(pm => ({
+      id: pm.id,
+      name: pm.name,
+      description: pm.description,
+      code: pm.code
+    })), [apiPaymentMethods]);
+
+  // Mapear ApiInstallment para UiInstallment para IntegratedPaymentMethods
+  const uiInstallments: UiInstallment[] = useMemo(() =>
+    apiInstallments.map(inst => ({
+      id: inst.id,
+      installment: inst.installment,
+      discountPercentage: inst.discountPercentage,
+      paymentMethodId: inst.paymentMethodId
+    })), [apiInstallments]);
+
+  // Definir os objetos de método de pagamento selecionados
+  const selectedRecurrentPaymentMethod = useMemo(
+    () => apiPaymentMethods.find(pm => pm.id === recurringPaymentMethodId),
+    [apiPaymentMethods, recurringPaymentMethodId]
+  );
+
+  const selectedOneTimePaymentMethod = useMemo(
+    () => apiPaymentMethods.find(pm => pm.id === oneTimePaymentMethodId),
+    [apiPaymentMethods, oneTimePaymentMethodId]
+  );
 
   // useEffect para buscar dados da API
   useEffect(() => {
     async function fetchData() {
       setIsLoadingApiData(true);
       try {
+        // Continuar buscando outros dados:
         const [pmResponse, odResponse, instResponse] = await Promise.all([
           fetch('/api/payment-methods'),
           fetch('/api/offer-durations'),
           fetch('/api/installments'),
+          // fetch('/api/coupons') // REMOVIDO
         ]);
 
+        // Ajustar a condição de erro
         if (!pmResponse.ok || !odResponse.ok || !instResponse.ok) {
           toast({ title: "Erro ao carregar dados do carrinho", description: "Não foi possível buscar informações essenciais da API.", variant: "destructive" });
           throw new Error('Falha ao buscar dados da API para o carrinho');
@@ -230,14 +271,14 @@ export default function CarrinhoPage() {
         const pmData = await pmResponse.json();
         const odData = await odResponse.json();
         const instData = await instResponse.json();
+        // const couponsData = await couponsResponse.json(); // REMOVIDO
 
         setApiPaymentMethods(pmData);
         setApiOfferDurations(odData);
         setApiInstallments(instData);
 
-        if (odData.length > 0 && !selectedProjectDurationId) { // Define padrão apenas se não houver um selecionado
+        if (odData.length > 0 && !selectedProjectDurationId) {
            setSelectedProjectDurationId(odData[0].id);
-           setProjectDurationSelected(true);
         }
 
       } catch (error) {
@@ -249,78 +290,106 @@ export default function CarrinhoPage() {
     }
     fetchData();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // selectedProjectDurationId removido para evitar loop de re-fetch inicial
+  }, []); // currentSession não precisa estar aqui, pois o useEffect de fetchData não depende dele diretamente para refazer as chamadas de payment-methods etc.
 
-  // useEffect para log (agora com dependências corretas)
+  // Define o primeiro método de pagamento e duração como padrão APÓS os dados da API serem carregados
   useEffect(() => {
-    const currentRecurringItems = items.filter((item) => item.paymentType === "RECURRENT");
-    const currentOneTimeItems = items.filter((item) => item.paymentType === "ONE_TIME");
-    const calculatedRecurringSubtotalForLog = currentRecurringItems.reduce((sum, item) => sum + (item.displayPrice || 0) * item.quantity, 0);
-    const calculatedOneTimeSubtotalForLog = currentOneTimeItems.reduce((sum, item) => sum + (item.displayPrice || 0) * item.quantity, 0);
-
-    console.log('ESTADO ATUAL DO CARRINHO NA ETAPA 1:', {
-      items,
-      itemCount,
+    if (!isLoadingApiData) {
+      if (apiPaymentMethods.length > 0 && !recurringPaymentMethodId) {
+        const firstMethod = apiPaymentMethods[0];
+        setRecurringPaymentMethodId(firstMethod.id);
+      }
+      if (apiOfferDurations.length > 0 && !selectedProjectDurationId) {
+        setSelectedProjectDurationId(apiOfferDurations[0].id);
+      }
+      if (oneTimeItems.length > 0 && apiPaymentMethods.length > 0 && !oneTimePaymentMethodId) {
+        setOneTimePaymentMethodId(apiPaymentMethods[0].id);
+      }
+      
+      // Marcar a página como pronta para renderizar
+      if (isCartReady) {
+        setPageReady(true);
+      }
+    }
+  }, [
+    isLoadingApiData, 
       isCartReady,
-      pageReady,
-      activeStep,
-      recurringItemsData: currentRecurringItems.map(item => ({ id: item.id, name: item.name, paymentType: item.paymentType, displayPrice: item.displayPrice, quantity: item.quantity })),
-      oneTimeItemsData: currentOneTimeItems.map(item => ({ id: item.id, name: item.name, paymentType: item.paymentType, displayPrice: item.displayPrice, quantity: item.quantity })),
-      calculatedRecurringSubtotal: calculatedRecurringSubtotalForLog,
-      calculatedOneTimeSubtotal: calculatedOneTimeSubtotalForLog,
-      stateRecurringSubtotal: recurringSubtotal, 
-      stateOneTimeSubtotal: oneTimeSubtotal, 
-      recurringPaymentMethodId: recurringPaymentMethod, // Renomeado para clareza
-      oneTimePaymentMethodId: oneTimePaymentMethod, // Renomeado para clareza
-      selectedProjectDurationId: selectedProjectDurationId,
-      selectedRecurringInstallmentId: selectedRecurringInstallmentId,
-      selectedOneTimeInstallmentId: selectedOneTimeInstallmentId,
-      cardOption,
-      oneTimeCardOption,
-      boletoPixFrequency,
-      oneTimeBoletoPixFrequency,
-      recurringCouponInfo,
-      oneTimeCouponInfo
-    });
-  }, [items, itemCount, isCartReady, pageReady, activeStep, recurringSubtotal, oneTimeSubtotal, recurringPaymentMethod, oneTimePaymentMethod, cardOption, oneTimeCardOption, boletoPixFrequency, oneTimeBoletoPixFrequency, selectedProjectDurationId, selectedRecurringInstallmentId, selectedOneTimeInstallmentId, recurringCouponInfo, oneTimeCouponInfo]);
+    apiPaymentMethods, 
+    apiOfferDurations, 
+    recurringPaymentMethodId, 
+    selectedProjectDurationId,
+    oneTimeItems,
+    oneTimePaymentMethodId
+  ]);
 
-  // useEffect para inicializar a página
-  useEffect(() => {
-    if (isCartReady && !isLoadingApiData) {
-      setPageReady(true)
+  // Lógica de cálculo de descontos e totais para o NewPaymentSummary
+  const recurringDurationMonths = useMemo(() => selectedProjectDurationDetails?.months || 1, [selectedProjectDurationDetails]);
+  const recurringTotalContractValue = useMemo(() => recurringMonthlySubtotal * recurringDurationMonths, [recurringMonthlySubtotal, recurringDurationMonths]);
+
+  const recurringPaymentSummaryDiscounts = useMemo(() => {
+    let totalDiscountPercentage = 0;
+
+    // Aplica desconto da parcela SE uma parcela estiver selecionada
+    if (selectedRecurringInstallmentDetails) {
+      totalDiscountPercentage += selectedRecurringInstallmentDetails.discountPercentage / 100;
+       }
+    // Não há mais desconto direto do método de pagamento (ex: 17% boleto à vista) aqui.
+    // Essa lógica foi removida para alinhar com doc.txt.
+    
+    if (recurringCouponInfo?.discountPercentage) {
+        totalDiscountPercentage += recurringCouponInfo.discountPercentage / 100;
     }
-  }, [isCartReady, isLoadingApiData])
-
-  // useEffects para validação (adaptar para IDs da API)
-  useEffect(() => {
-    setRecurringPaymentMethodSelected(!!recurringPaymentMethod)
-  }, [recurringPaymentMethod])
-
-  useEffect(() => {
-    setOneTimePaymentMethodSelected(!!oneTimePaymentMethod)
-  }, [oneTimePaymentMethod])
-
-  useEffect(() => {
-    // Se o método de pagamento recorrente for cartão de crédito e a opção for parcelado,
-    // então a seleção de parcelas é obrigatória.
-    if (recurringPaymentMethod && apiPaymentMethods.find(pm => pm.id === recurringPaymentMethod)?.code === 'credit-card' && cardOption === "parcelado") {
-      setRecurringInstallmentsSelected(!!selectedRecurringInstallmentId)
-    } else {
-      setRecurringInstallmentsSelected(true) // Não requerido para outros ou se não for parcelado
+    
+    if (projectDurationDiscountPercentage > 0) {
+        totalDiscountPercentage += projectDurationDiscountPercentage / 100;
     }
-  }, [recurringPaymentMethod, apiPaymentMethods, cardOption, selectedRecurringInstallmentId])
 
-  useEffect(() => {
-    if (oneTimePaymentMethod && apiPaymentMethods.find(pm => pm.id === oneTimePaymentMethod)?.code === 'credit-card' && oneTimeCardOption === "parcelado") {
-      setOneTimeInstallmentsSelected(!!selectedOneTimeInstallmentId)
-    } else {
-      setOneTimeInstallmentsSelected(true)
+    return {
+      installmentDiscount: totalDiscountPercentage, 
+      fidelityDiscount: 0.06, // Esta lógica de fidelidade permanece
+      totalDiscount: totalDiscountPercentage, 
+    };
+  }, [
+    recurringPaymentMethodId, // Mantido para reavaliar se o método muda, mesmo que não usado diretamente aqui
+    selectedRecurringInstallmentDetails,
+    recurringCouponInfo,
+    projectDurationDiscountPercentage
+  ]);
+
+  const recurringNumberOfInstallments = useMemo(() => {
+    const selectedRecMethodDetails = uiPaymentMethods.find(pm => pm.id === recurringPaymentMethodId);
+    
+    if (selectedRecurringInstallmentId && selectedRecMethodDetails) { // Se uma parcela específica foi selecionada
+        return selectedRecurringInstallmentDetails?.installment || 1;
     }
-  }, [oneTimePaymentMethod, apiPaymentMethods, oneTimeCardOption, selectedOneTimeInstallmentId])
+    
+    // Se não há parcela selecionada, mas o método é cartão (assume-se recorrente não parcelado)
+    if (!selectedRecurringInstallmentId && selectedRecMethodDetails?.code === 'credit-card') {
+      return recurringDurationMonths;
+    }
+    
+    // Para outros métodos sem parcela selecionada (boleto, pix etc.), ou se não for cartão
+    return 1;
+  }, [selectedRecurringInstallmentDetails, recurringPaymentMethodId, uiPaymentMethods, recurringDurationMonths, selectedRecurringInstallmentId]);
 
-  useEffect(() => {
-    setProjectDurationSelected(!!selectedProjectDurationId)
-  }, [selectedProjectDurationId])
+  const oneTimePaymentSummaryDiscounts = useMemo(() => {
+    let totalDiscountPercentage = 0;
+
+    if (selectedOneTimeInstallmentDetails?.discountPercentage) {
+      totalDiscountPercentage += selectedOneTimeInstallmentDetails.discountPercentage / 100;
+    }
+    if (oneTimeCouponInfo?.discountPercentage) {
+      totalDiscountPercentage += oneTimeCouponInfo.discountPercentage / 100;
+    }
+
+    return {
+      installmentDiscount: totalDiscountPercentage, // Combina parcelamento e cupom
+      totalDiscount: totalDiscountPercentage,
+    };
+  }, [
+    selectedOneTimeInstallmentDetails,
+    oneTimeCouponInfo,
+  ]);
 
   const customerInfo = {
     name: "Empresa XYZ Ltda",
@@ -360,74 +429,130 @@ export default function CarrinhoPage() {
   );
   
   const handleApplyRecurringCoupon = useCallback(async () => {
-    if (!recurringCouponCode) return;
+    // Usar currentSession do contexto
+    if (!recurringCouponCode || !currentSession || !currentSession.recurrentOfferId) {
+      toast({ title: "Erro", description: "Código do cupom ou ID da oferta recorrente ausente.", variant: "destructive" });
+      return;
+    }
     setApplyingRecurringCoupon(true);
-    // Esta função precisará da offerId correta, que é obtida no handleCheckout.
-    // Idealmente, a aplicação do cupom deve acontecer após a criação da oferta na API.
-    // Por ora, a lógica aqui é um placeholder ou deve ser movida/integrada ao handleCheckout.
-    console.warn("handleApplyRecurringCoupon: Lógica de chamada à API de cupom pendente de offerId.")
-    // Exemplo de como poderia ser após ter a offerId:
-    // const session = await getCurrentSession(); // Função para obter a sessão atual
-    // if (session && session.recurrentOfferId) { ... chamaria fetch ... }
-    // MOCK TEMPORÁRIO:
-    if (recurringCouponCode.toUpperCase() === "RECORRENTE10") {
-      setRecurringCouponInfo({ id: "mockcoupon1", code: "RECORRENTE10", discountPercentage: 10, type: "RECURRENT"} as ApiCoupon);
-      toast({ title: "Cupom RECORRENTE10 (mock) aplicado!" });
+    try {
+      const updatedOffer = await salesApi.applyCoupon(currentSession.recurrentOfferId, recurringCouponCode);
+      // A API applyCoupon retorna a OFERTA atualizada.
+      // Precisamos extrair a informação do cupom da oferta, se aplicável.
+      if (updatedOffer.couponId && updatedOffer.couponDiscountPercentage) {
+        // Simular um objeto ApiCoupon se a API de salesApi.applyCoupon não retornar um
+        const appliedCouponDetails: ApiCoupon = {
+          id: updatedOffer.couponId,
+          code: recurringCouponCode, // O código que o usuário digitou
+          discountPercentage: updatedOffer.couponDiscountPercentage,
+          type: "RECURRENT", // Assumindo, pode precisar de mais lógica
+          // createdAt, updatedAt, usedOfferId podem ser omitidos ou mockados se não vierem da oferta
+        };
+        setRecurringCouponInfo(appliedCouponDetails);
+        toast({ title: "Cupom aplicado!", description: `Desconto de ${updatedOffer.couponDiscountPercentage}% adicionado.` });
+      } else if (updatedOffer.status === "COUPON_NOT_FOUND" || updatedOffer.status === "COUPON_INVALID" || updatedOffer.status === "COUPON_EXPIRED" ) {
+         setRecurringCouponInfo(null);
+         toast({ title: "Cupom inválido", description: updatedOffer.message || "O código do cupom não pôde ser aplicado.", variant: "destructive" });
+      } else {
+        // Se a oferta foi atualizada mas não temos certeza se o cupom foi a causa do desconto
+        // ou se o cupom não resultou em desconto visível na oferta.
+        // Idealmente a API de oferta /coupon deveria dar um feedback mais claro.
+        // Por ora, se não houver couponId na oferta, consideramos que não foi aplicado com sucesso.
+        const existingCoupon = currentSession.recurrentOffer?.coupon; // Checa se já havia um cupom na oferta da sessão
+        if (existingCoupon && existingCoupon.code === recurringCouponCode) {
+          setRecurringCouponInfo(existingCoupon); // Reafirma o cupom existente
+          toast({ title: "Cupom já aplicado", description: `Cupom ${existingCoupon.code} já está ativo.` });
     } else {
       setRecurringCouponInfo(null);
-      toast({ title: "Cupom recorrente inválido (mock)", variant: "destructive" });
+          toast({ title: "Cupom não aplicado", description: "Não foi possível aplicar o cupom.", variant: "destructive" });
+        }
+      }
+    } catch (err) {
+      toast({ title: "Erro ao aplicar cupom", description: (err as Error).message, variant: "destructive" });
+      setRecurringCouponInfo(null);
     }
     setApplyingRecurringCoupon(false);
-  }, [recurringCouponCode]);
+  }, [recurringCouponCode, currentSession]); // Adicionado currentSession às dependências
 
   const handleApplyOneTimeCoupon = useCallback(async () => {
-    if (!oneTimeCouponCode) return;
+    // Usar currentSession do contexto
+    if (!oneTimeCouponCode || !currentSession || !currentSession.oneTimeOfferId) { 
+      toast({ title: "Erro", description: "Código do cupom ou ID da oferta pontual ausente.", variant: "destructive" });
+      return;
+    }
     setApplyingOneTimeCoupon(true);
-    console.warn("handleApplyOneTimeCoupon: Lógica de chamada à API de cupom pendente de offerId.")
-    // MOCK TEMPORÁRIO:
-    if (oneTimeCouponCode.toUpperCase() === "PONTUAL10") {
-      setOneTimeCouponInfo({ id: "mockcoupon2", code: "PONTUAL10", discountPercentage: 10, type: "ONE_TIME"} as ApiCoupon);
-      toast({ title: "Cupom PONTUAL10 (mock) aplicado!" });
+    try {
+      const updatedOffer = await salesApi.applyCoupon(currentSession.oneTimeOfferId, oneTimeCouponCode);
+      if (updatedOffer.couponId && updatedOffer.couponDiscountPercentage) {
+        const appliedCouponDetails: ApiCoupon = {
+          id: updatedOffer.couponId,
+          code: oneTimeCouponCode,
+          discountPercentage: updatedOffer.couponDiscountPercentage,
+          type: "ONE_TIME",
+        };
+        setOneTimeCouponInfo(appliedCouponDetails);
+        toast({ title: "Cupom aplicado!", description: `Desconto de ${updatedOffer.couponDiscountPercentage}% adicionado.` });
+      } else if (updatedOffer.status === "COUPON_NOT_FOUND" || updatedOffer.status === "COUPON_INVALID" || updatedOffer.status === "COUPON_EXPIRED" ) {
+        setOneTimeCouponInfo(null);
+        toast({ title: "Cupom inválido", description: updatedOffer.message || "O código do cupom não pôde ser aplicado.", variant: "destructive" });
+      } else {
+        const existingCoupon = currentSession.oneTimeOffer?.coupon;
+        if (existingCoupon && existingCoupon.code === oneTimeCouponCode) {
+          setOneTimeCouponInfo(existingCoupon);
+          toast({ title: "Cupom já aplicado", description: `Cupom ${existingCoupon.code} já está ativo.` });
     } else {
       setOneTimeCouponInfo(null);
-      toast({ title: "Cupom pontual inválido (mock)", variant: "destructive" });
+          toast({ title: "Cupom não aplicado", description: "Não foi possível aplicar o cupom.", variant: "destructive" });
+        }
+      }
+    } catch (err) {
+      toast({ title: "Erro ao aplicar cupom pontual", description: (err as Error).message, variant: "destructive" });
+      setOneTimeCouponInfo(null);
     }
     setApplyingOneTimeCoupon(false);
-  }, [oneTimeCouponCode]);
+  }, [oneTimeCouponCode, currentSession]); // Adicionado currentSession às dependências
 
   const calculateTotal = useCallback(() => {
-    let finalRecurringDisplayTotal = recurringSubtotal * (selectedProjectDurationDetails?.months || 1);
+    let finalRecurringDisplayTotal = recurringMonthlySubtotal * (selectedProjectDurationDetails?.months || 1);
     let finalOneTimeDisplayTotal = oneTimeSubtotal;
 
     if (recurringItems.length > 0 && selectedProjectDurationDetails) {
-        let currentTotalRec = recurringSubtotal * selectedProjectDurationDetails.months;
+        let currentTotalRec = recurringMonthlySubtotal * selectedProjectDurationDetails.months;
         let totalDiscountPercentageRec = 0;
 
         if (projectDurationDiscountPercentage > 0) {
             totalDiscountPercentageRec += projectDurationDiscountPercentage / 100; 
         }
-        if (selectedRecurringPaymentMethodDetails?.discountPercentage) {
-            totalDiscountPercentageRec += selectedRecurringPaymentMethodDetails.discountPercentage / 100;
-        }
+
+        // const selectedRecMethodDetails = uiPaymentMethods.find(pm => pm.id === recurringPaymentMethodId); // Não precisamos mais do selectedRecMethodDetails aqui para desconto
+        // Se uma parcela recorrente foi selecionada, seu desconto é aplicado.
         if (selectedRecurringInstallmentDetails?.discountPercentage) {
             totalDiscountPercentageRec += selectedRecurringInstallmentDetails.discountPercentage / 100;
         }
+        // Lógica de selectedRecMethodDetails.discount foi removida.
+        
         if (recurringCouponInfo?.discountPercentage) {
             totalDiscountPercentageRec += recurringCouponInfo.discountPercentage / 100;
         }
+        
         finalRecurringDisplayTotal = currentTotalRec * (1 - totalDiscountPercentageRec); 
+
+        if (isFidelizado) {
+            finalRecurringDisplayTotal *= (1 - 0.06);
+        }
     }
 
     if (oneTimeItems.length > 0) {
         let currentTotalOt = oneTimeSubtotal;
         let totalDiscountPercentageOt = 0;
+        // const selectedOtMethodDetails = uiPaymentMethods.find(pm => pm.id === oneTimePaymentMethodId); // Não precisamos mais do selectedOtMethodDetails aqui para desconto
 
-        if (selectedOneTimePaymentMethodDetails?.discountPercentage) {
-            totalDiscountPercentageOt += selectedOneTimePaymentMethodDetails.discountPercentage / 100;
-        }
+        // Se uma parcela pontual foi selecionada, seu desconto é aplicado.
         if (selectedOneTimeInstallmentDetails?.discountPercentage) {
             totalDiscountPercentageOt += selectedOneTimeInstallmentDetails.discountPercentage / 100;
         }
+        // Lógica de selectedOtMethodDetails.discount foi removida.
+        
         if (oneTimeCouponInfo?.discountPercentage) {
             totalDiscountPercentageOt += oneTimeCouponInfo.discountPercentage / 100;
         }
@@ -438,19 +563,74 @@ export default function CarrinhoPage() {
   }, [
     recurringItems,
     oneTimeItems,
-    recurringSubtotal,
+    recurringMonthlySubtotal,
     oneTimeSubtotal,
     selectedProjectDurationDetails,
-    selectedRecurringPaymentMethodDetails,
-    selectedOneTimePaymentMethodDetails,
+    // recurringPaymentMethodId, // Não mais necessário diretamente para descontos de método
+    // oneTimePaymentMethodId,  // Não mais necessário diretamente para descontos de método
+    // uiPaymentMethods, 
     selectedRecurringInstallmentDetails,
     selectedOneTimeInstallmentDetails,
     recurringCouponInfo,
     oneTimeCouponInfo,
-    projectDurationDiscountPercentage 
+    projectDurationDiscountPercentage,
+    // cardOption, // Removido pelo auto-apply
+    isFidelizado
   ]);
 
-  const total = useMemo(() => calculateTotal(), [calculateTotal])
+  const finalRecurringTotalAfterDiscounts = useMemo(() => {
+    let total = recurringMonthlySubtotal * (selectedProjectDurationDetails?.months || 1);
+    if (recurringItems.length > 0 && selectedProjectDurationDetails) {
+      let currentTotalRec = recurringMonthlySubtotal * selectedProjectDurationDetails.months;
+      let totalDiscountPercentageRec = 0;
+      if (projectDurationDiscountPercentage > 0) {
+        totalDiscountPercentageRec += projectDurationDiscountPercentage / 100;
+      }
+      if (selectedRecurringInstallmentDetails?.discountPercentage) {
+        totalDiscountPercentageRec += selectedRecurringInstallmentDetails.discountPercentage / 100;
+      }
+      if (recurringCouponInfo?.discountPercentage) {
+        totalDiscountPercentageRec += recurringCouponInfo.discountPercentage / 100;
+      }
+      total = currentTotalRec * (1 - totalDiscountPercentageRec);
+      if (isFidelizado) {
+        total *= (1 - 0.06);
+      }
+    }
+    return recurringItems.length > 0 ? total : 0;
+  }, [
+    recurringItems,
+    recurringMonthlySubtotal,
+    selectedProjectDurationDetails,
+    projectDurationDiscountPercentage,
+    selectedRecurringInstallmentDetails,
+    recurringCouponInfo,
+    isFidelizado
+  ]);
+
+  const finalOneTimeTotalAfterDiscounts = useMemo(() => {
+    let total = oneTimeSubtotal;
+    if (oneTimeItems.length > 0) {
+      let currentTotalOt = oneTimeSubtotal;
+      let totalDiscountPercentageOt = 0;
+      if (selectedOneTimeInstallmentDetails?.discountPercentage) {
+        totalDiscountPercentageOt += selectedOneTimeInstallmentDetails.discountPercentage / 100;
+      }
+      if (oneTimeCouponInfo?.discountPercentage) {
+        totalDiscountPercentageOt += oneTimeCouponInfo.discountPercentage / 100;
+      }
+      total = currentTotalOt * (1 - totalDiscountPercentageOt);
+    }
+    return oneTimeItems.length > 0 ? total : 0;
+  }, [
+    oneTimeItems,
+    oneTimeSubtotal,
+    selectedOneTimeInstallmentDetails,
+    oneTimeCouponInfo
+  ]);
+
+  // total agora é a soma dos totais líquidos parciais
+  const total = useMemo(() => finalRecurringTotalAfterDiscounts + finalOneTimeTotalAfterDiscounts, [finalRecurringTotalAfterDiscounts, finalOneTimeTotalAfterDiscounts]);
 
   const handleDateChange = useCallback(
     (dates: {
@@ -472,218 +652,302 @@ export default function CarrinhoPage() {
   }, [])
 
   // Mover handleCheckout para antes de handleNextStep
-  const handleCheckout = useCallback(async () => {
-    setIsCheckingOut(true);
-    let currentSession: Session | null = null;
+  const handleCheckout = async () => {
+    if (!canProceedToNextStep()) {
+      toast({
+        title: "Pendências no Pedido",
+        description: "Por favor, preencha todas as informações obrigatórias antes de prosseguir.",
+        variant: "destructive",
+      })
+      return
+    }
+    setIsCheckingOut(true)
+
+    let finalRecurrentOfferDetails: Offer | null = null;
+    let finalOneTimeOfferDetails: Offer | null = null;
+    let finalTotalFromApi = 0;
+
+    const recurrentOfferId = currentSession?.recurrentOfferId;
+    const oneTimeOfferId = currentSession?.oneTimeOfferId;
+
+    // Atualizar ofertas com as datas selecionadas pelo usuário
+    try {
+      const updatePayload = {
+        projectStartDate: projectDates.startDate,
+        paymentStartDate: projectDates.firstPaymentDate,
+        payDay: projectDates.monthlyPaymentDay,
+      };
+
+      if (recurrentOfferId && recurringItems.length > 0) {
+        // console.log(`Atualizando oferta recorrente ${recurrentOfferId} com datas:`, updatePayload);
+        await salesApi.updateOffer(recurrentOfferId, updatePayload);
+      }
+      if (oneTimeOfferId && oneTimeItems.length > 0) {
+        // console.log(`Atualizando oferta pontual ${oneTimeOfferId} com datas:`, updatePayload);
+        await salesApi.updateOffer(oneTimeOfferId, updatePayload);
+      }
+    } catch (error) {
+      console.error("Erro ao atualizar ofertas com datas:", error);
+      toast({
+        title: "Erro ao Salvar Datas",
+        description: "Não foi possível salvar as datas do projeto nas ofertas. O cronograma pode não ser exibido corretamente.",
+        variant: "destructive",
+      });
+      // Considerar se deve parar o checkout aqui ou permitir continuar com cronograma potencialmente ausente.
+    }
 
     try {
-      const sessionResponse = await fetch('/api/sessions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: customerInfo.name }), 
-      });
-      
-      if (!sessionResponse.ok) {
-        const err = await sessionResponse.json();
-        throw new Error(err.error || 'Falha ao criar/obter sessão de pagamento');
-      }
-      currentSession = await sessionResponse.json() as Session;
-      const sessionId = currentSession.id;
-      const recurrentOfferId = currentSession.recurrentOfferId;
-      const oneTimeOfferId = currentSession.oneTimeOfferId;
-
-      if (recurringItems.length > 0 && recurrentOfferId) {
-        for (const item of recurringItems) {
-          const itemPriceId = item.prices && item.prices.length > 0 ? item.prices[0].id : undefined;
-          if (!itemPriceId) {
-            console.warn(`Item recorrente ${item.name} não possui priceId. Pulando adição à oferta.`);
-            continue;
-          }
-          await fetch('/api/offers/items', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              offerId: recurrentOfferId,
-              productId: item.id,
-              priceId: itemPriceId, 
-              quantity: item.quantity,
-            }),
-          }); 
-        }
-        
-        if (selectedProjectDurationId) {
-            await fetch('/api/offers/offer-duration', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                offerId: recurrentOfferId,
-                offerDurationId: selectedProjectDurationId, 
-              }),
-            });
-        } 
-        
-        if (recurringCouponCode && recurrentOfferId) { 
-          await fetch('/api/offers/coupon', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              offerId: recurrentOfferId,
-              couponCode: recurringCouponCode, 
-            }),
-          });
-        }
-        
-        if (selectedRecurringInstallmentId && recurrentOfferId) {
-          await fetch('/api/offers/installment', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              offerId: recurrentOfferId,
-              installmentId: selectedRecurringInstallmentId, 
-            }),
-          });
-        }
-      }
-      
-      if (oneTimeItems.length > 0 && oneTimeOfferId) {
-        for (const item of oneTimeItems) {
-          const itemPriceId = item.prices && item.prices.length > 0 ? item.prices[0].id : undefined;
-          if (!itemPriceId) {
-            console.warn(`Item pontual ${item.name} não possui priceId. Pulando adição à oferta.`);
-            continue;
-          }
-          await fetch('/api/offers/items', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              offerId: oneTimeOfferId,
-              productId: item.id,
-              priceId: itemPriceId,
-              quantity: item.quantity,
-            }),
-          });
-        }
-        
-        if (oneTimeCouponCode && oneTimeOfferId) {
-          await fetch('/api/offers/coupon', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              offerId: oneTimeOfferId,
-              couponCode: oneTimeCouponCode,
-            }),
-          });
-        }
-        
-        if (selectedOneTimeInstallmentId && oneTimeOfferId) {
-          await fetch('/api/offers/installment', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              offerId: oneTimeOfferId,
-              installmentId: selectedOneTimeInstallmentId,
-            }),
-          });
-        }
-      }
-      
-      const offerIdForDates = recurrentOfferId || oneTimeOfferId;
-      if (offerIdForDates && (recurringItems.length > 0 || oneTimeItems.length > 0)) {
-        await fetch('/api/offers', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            offerId: offerIdForDates,
-            projectStartDate: projectDates.startDate,
-            paymentStartDate: projectDates.firstPaymentDate,
-            payDay: projectDates.monthlyPaymentDay,
-          }),
-        });
-      }
-
-      let finalTotalFromApi = 0;
-      let finalRecurrentOfferDetails = null;
-      let finalOneTimeOfferDetails = null;
-
-      if (recurrentOfferId) {
-        const recOfferRes = await fetch(`/api/offers/${recurrentOfferId}`);
-        if (recOfferRes.ok) {
-          finalRecurrentOfferDetails = await recOfferRes.json();
+      if (recurrentOfferId && recurringItems.length > 0) { // Apenas busca se houver itens recorrentes
+        const recOfferRes = await salesApi.getOffer(recurrentOfferId);
+        if (recOfferRes && !(recOfferRes.statusCode && recOfferRes.statusCode >= 400 || recOfferRes.errors)) {
+          finalRecurrentOfferDetails = recOfferRes;
           finalTotalFromApi += finalRecurrentOfferDetails?.totalPrice || 0;
+        } else {
+          console.error(`Falha ao buscar detalhes da oferta recorrente ${recurrentOfferId}:`, recOfferRes);
+          toast({ title: "Erro", description: `Não foi possível buscar detalhes da oferta recorrente (${recurrentOfferId}).`, variant: "destructive" });
+          // Considerar se deve parar o checkout aqui
         }
       }
-      if (oneTimeOfferId) {
-        const otOfferRes = await fetch(`/api/offers/${oneTimeOfferId}`);
-        if (otOfferRes.ok) {
-          finalOneTimeOfferDetails = await otOfferRes.json();
+      if (oneTimeOfferId && oneTimeItems.length > 0) { // Apenas busca se houver itens pontuais
+        const otOfferRes = await salesApi.getOffer(oneTimeOfferId);
+        if (otOfferRes && !(otOfferRes.statusCode && otOfferRes.statusCode >= 400 || otOfferRes.errors)) {
+          finalOneTimeOfferDetails = otOfferRes;
           finalTotalFromApi += finalOneTimeOfferDetails?.totalPrice || 0;
+        } else {
+          console.error(`Falha ao buscar detalhes da oferta pontual ${oneTimeOfferId}:`, otOfferRes);
+          toast({ title: "Erro", description: `Não foi possível buscar detalhes da oferta pontual (${oneTimeOfferId}).`, variant: "destructive" });
+          // Considerar se deve parar o checkout aqui
+        } 
+      }
+    } catch (error) {
+        console.error("Erro ao buscar detalhes das ofertas finais:", error);
+        toast({ title: "Erro Crítico", description: "Falha ao obter os detalhes finais das ofertas da API.", variant: "destructive" });
+        setIsCheckingOut(false);
+        return;
+    }
+        
+    // Determinar a oferta principal para datas. Pode ser a recorrente se existir, senão a pontual.
+    const primaryOfferForDates = finalRecurrentOfferDetails || finalOneTimeOfferDetails;
+
+    // ---- INÍCIO DA LÓGICA PARA CALCULAR PREÇOS FINAIS POR ITEM ----
+    const processedItemsForConfirmation: Array<{
+      id: string; // productId
+      name: string;
+      quantity: number;
+      paymentType: "RECURRENT" | "ONE_TIME";
+      finalPricePerUnit: number; // Preço unitário LÍQUIDO (mensal para recorrente)
+      finalTotalItemPrice: number; // Preço total LÍQUIDO do item (contrato para recorrente)
+    }> = [];
+
+    // Processar itens recorrentes
+    if (recurringItems.length > 0) {
+      const totalRecurringMonths = selectedProjectDurationDetails?.months || 1;
+      // Evitar divisão por zero se recurringMonthlySubtotal for 0 mas houver itens
+      const overallRecurringLiquidMonthlyTotal = recurringMonthlySubtotal > 0 
+        ? finalRecurringTotalAfterDiscounts / totalRecurringMonths
+        : 0;
+
+      recurringItems.forEach(item => {
+        const itemBaseMonthlyPrice = (item.displayPrice || 0); // Preço mensal base do item
+        const itemProportion = recurringMonthlySubtotal > 0 
+          ? itemBaseMonthlyPrice / recurringMonthlySubtotal
+          : (1 / recurringItems.length); // Distribuição igual se subtotal for 0
+
+        const itemLiquidMonthlyPrice = itemProportion * overallRecurringLiquidMonthlyTotal;
+        const itemLiquidTotalContractPrice = itemLiquidMonthlyPrice * totalRecurringMonths;
+
+        processedItemsForConfirmation.push({
+          id: item.id,
+          name: item.name,
+          quantity: item.quantity,
+          paymentType: "RECURRENT",
+          finalPricePerUnit: itemLiquidMonthlyPrice,
+          finalTotalItemPrice: itemLiquidTotalContractPrice,
+        });
+      });
+    }
+
+    // Processar itens pontuais
+    if (oneTimeItems.length > 0) {
+      oneTimeItems.forEach(item => {
+        const itemBasePrice = (item.displayPrice || 0) * item.quantity;
+         // Evitar divisão por zero se oneTimeSubtotal for 0 mas houver itens
+        const itemProportion = oneTimeSubtotal > 0
+          ? itemBasePrice / oneTimeSubtotal
+          : (1 / oneTimeItems.length); // Distribuição igual se subtotal for 0
+        
+        const itemLiquidTotalPrice = itemProportion * finalOneTimeTotalAfterDiscounts;
+        const itemLiquidPricePerUnit = item.quantity > 0 ? itemLiquidTotalPrice / item.quantity : 0;
+
+        processedItemsForConfirmation.push({
+          id: item.id,
+          name: item.name,
+          quantity: item.quantity,
+          paymentType: "ONE_TIME",
+          finalPricePerUnit: itemLiquidPricePerUnit,
+          finalTotalItemPrice: itemLiquidTotalPrice,
+        });
+      });
+    }
+    // ---- FIM DA LÓGICA PARA CALCULAR PREÇOS FINAIS POR ITEM ----
+
+    const orderDataToStore = {
+      orderId: orderId,
+      date: primaryOfferForDates?.createdAt || orderDate.toISOString(),
+      total: finalRecurringTotalAfterDiscounts + finalOneTimeTotalAfterDiscounts,
+      
+      finalRecurrentOfferDetails: finalRecurrentOfferDetails,
+      finalOneTimeOfferDetails: finalOneTimeOfferDetails,
+      
+      processedItems: processedItemsForConfirmation, // NOVO CAMPO
+
+      sessionDetails: currentSession ? { id: currentSession.id } : undefined,
+      // Remover 'items' antigos se 'processedItems' for suficiente
+      // items: items.map(cartItem => ({ ... })) 
+    };
+
+    console.log("handleCheckout: Dados que serão salvos no localStorage para 'orderDetails':", JSON.stringify(orderDataToStore, null, 2));
+
+    localStorage.setItem("orderDetails", JSON.stringify(orderDataToStore));
+
+    router.push("/pedido-confirmado");
+      
+    setIsCheckingOut(false);
+  };
+
+  // Convertendo canProceedToNextStep para função regular para evitar problemas de inicialização com useCallback e dependências de useMemo
+  const canProceedToNextStep = () => {
+    if (activeStep === 0) {
+      if (recurringItems.length > 0) {
+        if (!selectedProjectDurationId) return false;
+        if (!recurringPaymentMethodId) return false;
+        const selectedRecMethodDetails = uiPaymentMethods.find(pm => pm.id === recurringPaymentMethodId);
+        if (recurringInstallments.length > 0 && !selectedRecurringInstallmentId) {
+            if(selectedRecMethodDetails?.code === 'credit-card') return false;
         }
       }
-
-      const orderDetails = {
-        orderId,
-        sessionId: sessionId,
-        date: formatDate(orderDate),
-        items, 
-        total: finalTotalFromApi, 
-        finalRecurrentOfferDetails,
-        finalOneTimeOfferDetails
-      };
-      localStorage.setItem("orderDetails", JSON.stringify(orderDetails));
-
-      toast({ title: "Pedido realizado com sucesso!", description: "Você será redirecionado para a página de confirmação.", variant: "default" });
-      router.push("/pedido-confirmado");
-      
-    } catch (error: any) {
-      console.error('Erro ao processar checkout:', error);
-      toast({ title: "Erro ao finalizar pedido", description: error.message || "Ocorreu um erro ao processar seu pedido.", variant: "destructive" });
-    } finally {
-      setIsCheckingOut(false);
+      if (oneTimeItems.length > 0) {
+        if (!oneTimePaymentMethodId) return false;
+        if (oneTimeInstallments.length > 0 && !selectedOneTimeInstallmentId) {
+            return false; 
     }
-  }, [
-    orderId, orderDate, items, router, customerInfo, 
-    recurringItems, oneTimeItems,
-    selectedProjectDurationId, recurringCouponCode, 
-    oneTimeCouponCode, 
-    selectedRecurringInstallmentId, selectedOneTimeInstallmentId,
-    projectDates,
-    // Não depender de 'total' aqui, pois ele é uma estimativa. O total real vem da API.
-    // Remover 'recurringCouponInfo' e 'oneTimeCouponInfo' se a lógica de cupom é apenas o código no checkout.
-  ]);
-
-  // Agora definindo handleNextStep após handleCheckout
-  const handleNextStep = useCallback(() => {
-    if (activeStep < checkoutSteps.length - 1) {
-      setActiveStep(activeStep + 1)
-    } else {
-      handleCheckout() 
-    }
-  }, [activeStep, handleCheckout])
-
-  const canProceedToNextStep = useCallback(() => {
-    if (activeStep === 0) {
-      if (recurringItems.length > 0 && !selectedProjectDurationId) return false;
-      if (recurringItems.length > 0 && !recurringPaymentMethod) return false;
-      if (recurringItems.length > 0 && recurringPaymentMethod && apiPaymentMethods.find(pm => pm.id === recurringPaymentMethod)?.code === 'credit-card' && cardOption === "parcelado" && !selectedRecurringInstallmentId) return false;
-            
-      if (oneTimeItems.length > 0 && !oneTimePaymentMethod) return false;
-      if (oneTimeItems.length > 0 && oneTimePaymentMethod && apiPaymentMethods.find(pm => pm.id === oneTimePaymentMethod)?.code === 'credit-card' && oneTimeCardOption === "parcelado" && !selectedOneTimeInstallmentId) return false;
-      
+      }
       return true;
     }
-    return true;
+    return true; 
+  };
+
+  // DEFINIR recurringInstallments e oneTimeInstallments ANTES de canProceedToNextStep e handleNextStep
+  const recurringInstallments = useMemo(() => {
+    if (!recurringPaymentMethodId) return [];
+    return apiInstallments.filter(inst => inst.paymentMethodId === recurringPaymentMethodId);
+  }, [apiInstallments, recurringPaymentMethodId]);
+
+  const oneTimeInstallments = useMemo(() => {
+    if (!oneTimePaymentMethodId) return [];
+    return apiInstallments.filter(inst => inst.paymentMethodId === oneTimePaymentMethodId);
+  }, [apiInstallments, oneTimePaymentMethodId]);
+
+  // Restaurando handleNextStep como useCallback
+  const handleNextStep = useCallback(() => {
+    if (activeStep < checkoutSteps.length - 1) {
+      setActiveStep(activeStep + 1);
+    } else {
+      handleCheckout();
+    }
+  }, [activeStep, handleCheckout, checkoutSteps]); // checkoutSteps é estável mas bom incluir
+
+  // Hook para o cronograma de pagamentos
+  const [showAllPayments, setShowAllPayments] = useState(false);
+  const initialPaymentEntries = 6; // Número de entradas para mostrar inicialmente
+
+  const paymentSchedule = useMemo(() => {
+    const schedule: Array<{
+      date: Date;
+      amount: number;
+      type: string;
+      paymentMethod: string;
+      originalDueDate?: Date; // Para referência, se ajustarmos para dia útil
+      isInstallment?: boolean; // Para diferenciar parcelas de um pagamento único total
+      installmentNumber?: number;
+      totalInstallments?: number;
+    }> = [];
+
+    const oneTimePaymentMethodName = (oneTimePaymentMethodId && uiPaymentMethods.find(pm => pm.id === oneTimePaymentMethodId)?.name) || "N/A";
+    const recurringPaymentMethodName = (recurringPaymentMethodId && uiPaymentMethods.find(pm => pm.id === recurringPaymentMethodId)?.name) || "N/A";
+
+    // Processar Itens Pontuais
+    if (oneTimeItems.length > 0 && finalOneTimeTotalAfterDiscounts > 0) {
+      const firstPaymentDateOneTime = new Date(projectDates.firstPaymentDate + "T00:00:00"); // Ajustar para evitar problemas de fuso
+
+      if (selectedOneTimeInstallmentDetails && selectedOneTimeInstallmentDetails.installment > 1) {
+        const numInstallments = selectedOneTimeInstallmentDetails.installment;
+        // O valor da parcela já considera o desconto da parcela, mas não o do cupom.
+        // finalOneTimeTotalAfterDiscounts é o valor LÍQUIDO total após todos os descontos (parcela e cupom).
+        const installmentAmount = finalOneTimeTotalAfterDiscounts / numInstallments;
+        for (let i = 0; i < numInstallments; i++) {
+          const dueDate = new Date(firstPaymentDateOneTime);
+          dueDate.setMonth(firstPaymentDateOneTime.getMonth() + i);
+          schedule.push({
+            date: dueDate,
+            amount: installmentAmount,
+            type: `Pontual (Parcela ${i + 1}/${numInstallments})`,
+            paymentMethod: oneTimePaymentMethodName,
+            isInstallment: true,
+            installmentNumber: i + 1,
+            totalInstallments: numInstallments
+          });
+        }
+      } else {
+        schedule.push({
+          date: firstPaymentDateOneTime,
+          amount: finalOneTimeTotalAfterDiscounts,
+          type: "Pontual (Único)",
+          paymentMethod: oneTimePaymentMethodName,
+        });
+      }
+    }
+
+    // Processar Itens Recorrentes
+    if (recurringItems.length > 0 && selectedProjectDurationDetails && selectedProjectDurationDetails.months > 0 && finalRecurringTotalAfterDiscounts > 0) {
+      const monthlyAmount = finalRecurringTotalAfterDiscounts / selectedProjectDurationDetails.months;
+      const firstRecPaymentDate = new Date(projectDates.firstPaymentDate + "T00:00:00");
+      
+      for (let i = 0; i < selectedProjectDurationDetails.months; i++) {
+        const paymentDate = new Date(firstRecPaymentDate);
+        paymentDate.setMonth(firstRecPaymentDate.getMonth() + i);
+        // Ajustar para o dia de pagamento mensal, mas apenas se não for o primeiro mês (que usa firstPaymentDate diretamente)
+        if (i > 0 || paymentDate.getDate() !== projectDates.monthlyPaymentDay) {
+             paymentDate.setDate(projectDates.monthlyPaymentDay);
+        }
+        // Se ao ajustar o dia, pulou para o mês seguinte (ex: dia 31 em Fev), volte para o último dia do mês correto.
+        if (paymentDate.getMonth() !== (firstRecPaymentDate.getMonth() + i) % 12) {
+            paymentDate.setDate(0); // Último dia do mês anterior (que é o mês correto da iteração)
+        }
+
+        schedule.push({
+          date: paymentDate,
+          amount: monthlyAmount,
+          type: "Recorrente",
+          paymentMethod: recurringPaymentMethodName,
+        });
+      }
+    }
+    
+    // TODO: Ajustar datas para dias úteis aqui (se necessário)
+
+    return schedule.sort((a, b) => a.date.getTime() - b.date.getTime());
   }, [
-    activeStep,
-    recurringItems.length,
-    oneTimeItems.length,
-    selectedProjectDurationId,
-    recurringPaymentMethod,
-    oneTimePaymentMethod,
-    apiPaymentMethods, 
-    cardOption, 
-    selectedRecurringInstallmentId,
-    oneTimeCardOption,
-    selectedOneTimeInstallmentId
+    oneTimeItems,
+    recurringItems,
+    projectDates,
+    selectedOneTimeInstallmentDetails,
+    selectedProjectDurationDetails,
+    finalOneTimeTotalAfterDiscounts,
+    finalRecurringTotalAfterDiscounts,
+    oneTimePaymentMethodId,
+    recurringPaymentMethodId,
+    uiPaymentMethods
   ]);
 
   if (!pageReady || isLoadingApiData) { 
@@ -754,9 +1018,9 @@ export default function CarrinhoPage() {
           </tbody>
           <tfoot className="bg-gray-50">
             <tr>
-              <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">Total</td>
+              <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">Total Mensal</td>
               <td className="px-4 py-3 whitespace-nowrap text-sm text-right font-bold">
-                {formatCurrency(recurringSubtotal)}/mês
+                {formatCurrency(recurringMonthlySubtotal)}/mês
               </td>
               <td></td>
             </tr>
@@ -902,239 +1166,158 @@ export default function CarrinhoPage() {
                             </p>
                           </div>
                         </div>
-                        {renderRecurringItemsTable()}
-
-                        <div className="mt-4 mb-6">
-                          <div className="flex items-center justify-between mb-3">
-                            <h4 className="text-sm font-medium">Duração do projeto</h4>
-                            {!projectDurationSelected && (
-                              <Badge variant="outline" className="text-red-500 border-red-200 bg-red-50">
-                                <AlertCircle className="h-3 w-3 mr-1" />
-                                Obrigatório
-                              </Badge>
-                            )}
+                        <div className="mb-6 rounded-lg border border-gray-200 p-4 bg-white">
+                          <div className="overflow-hidden">
+                            <table className="min-w-full divide-y divide-gray-200">
+                              <thead className="bg-gray-50">
+                                <tr>
+                                  <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Serviço</th>
+                                  <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Valor</th>
+                                  <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider w-20">Ações</th>
+                                </tr>
+                              </thead>
+                              <tbody className="bg-white divide-y divide-gray-200">
+                                {recurringItems.map((item) => (
+                                  <tr key={item.id}>
+                                    <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">{item.name}</td>
+                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-right font-medium">
+                                      {formatCurrency((item.displayPrice || 0) * item.quantity)}/mês
+                                    </td>
+                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-right">
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          handleRemoveItem(item.id) 
+                                        }}
+                                        className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                        aria-label={`Remover ${item.name}`}
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </Button>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                              <tfoot className="bg-gray-50">
+                                <tr>
+                                  <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">Total Mensal</td>
+                                  <td className="px-4 py-3 whitespace-nowrap text-sm text-right font-bold">
+                                    {formatCurrency(recurringMonthlySubtotal)}/mês
+                                  </td>
+                                  <td></td>
+                                </tr>
+                              </tfoot>
+                            </table>
                           </div>
-                          <RadioGroup
-                            value={selectedProjectDurationId || ''}
-                            onValueChange={(value) => setSelectedProjectDurationId(value)}
-                            className="flex flex-wrap gap-3 mt-2"
-                          >
-                            {apiOfferDurations.map((duration) => (
-                              <div key={duration.id} className="flex items-center space-x-2">
-                                <RadioGroupItem value={duration.id} id={`duration-${duration.id}`} />
-                                <Label htmlFor={`duration-${duration.id}`} className="cursor-pointer">
-                                  {duration.months} meses
-                                  {duration.discountPercentage > 0 && 
-                                    <span className="text-xs text-green-600 ml-1">({duration.discountPercentage}% off)</span>
-                                  }
-                                </Label>
-                              </div>
-                            ))}
-                          </RadioGroup>
-                          <p className="text-xs text-gray-500 mt-2">
-                            A duração do projeto afeta o valor total do contrato.
-                          </p>
                         </div>
 
-                        <Tabs defaultValue="cartao" className="w-full">
-                          <TabsList className="grid w-full grid-cols-2 mb-4">
-                            {apiPaymentMethods.filter(pm => pm.code === 'credit-card' || pm.code === 'boleto' || pm.code === 'pix').map(pm => (
-                              <TabsTrigger 
-                                key={pm.id} 
-                                value={pm.code === 'credit-card' ? 'cartao' : 'boleto-pix'}
-                                onClick={() => {
-                                  if (pm.code === 'credit-card') {
-                                    setRecurringPaymentMethod(pm.id)
-                                  } else {
-                                    // Para boleto/pix, podemos ter um default ou lógica adicional
-                                    setRecurringPaymentMethod(pm.id) 
-                                    // Se houver vários boletos/pix, a UI precisará de mais seletores
-                                    // Por ora, o primeiro boleto/pix encontrado ao clicar na aba
-                                    const firstBoletoOrPix = apiPaymentMethods.find(p => p.code === 'boleto' || p.code === 'pix');
-                                    if(firstBoletoOrPix) setRecurringPaymentMethod(firstBoletoOrPix.id);
-                                  }
-                                }}
-                                className="flex items-center gap-2"
-                              >
-                                {pm.code === 'credit-card' ? <CreditCard className="h-4 w-4" /> : <Wallet className="h-4 w-4" />}
-                                <span>{pm.name}</span>
-                              </TabsTrigger>
-                            ))}
-                          </TabsList>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-6">
+                          <div className="space-y-6">
+                            <ProjectDurationSelector
+                              offerDurations={apiOfferDurations}
+                              selectedDurationId={selectedProjectDurationId}
+                              onDurationSelect={setSelectedProjectDurationId}
+                            />
 
-                          <TabsContent value="cartao" className="space-y-4">
-                            <div className="flex items-center justify-between mb-3">
-                              <h4 className="text-sm font-medium">Escolha a forma de pagamento com cartão</h4>
-                              {(!recurringPaymentMethod || !apiPaymentMethods.find(pm => pm.id === recurringPaymentMethod && pm.code === 'credit-card')) && (
-                                <Badge variant="outline" className="text-red-500 border-red-200 bg-red-50">
-                                  <AlertCircle className="h-3 w-3 mr-1" />
-                                  Obrigatório
-                                </Badge>
-                              )}
-                            </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-                              <CardOption
-                                title="Cartão Recorrente"
-                                description="Cobrança mensal automática no seu cartão de crédito"
-                                price={formatCurrency(recurringSubtotal)} 
-                                priceLabel="/mês"
-                                isSelected={cardOption === "recorrente" && !!apiPaymentMethods.find(pm => pm.id === recurringPaymentMethod && pm.code === 'credit-card')}
-                                onClick={() => {
-                                  setCardOption("recorrente")
-                                  const creditCardMethod = apiPaymentMethods.find(pm => pm.code === 'credit-card');
-                                  if (creditCardMethod) setRecurringPaymentMethod(creditCardMethod.id);
-                                  setSelectedRecurringInstallmentId(null); // Recorrente não tem parcelas da lista `installments`
+                            <div className="space-y-2">
+                              <Label htmlFor="recurring-payment-method" className="font-medium">Método de Pagamento (Recorrente)</Label>
+                              <Select
+                                value={recurringPaymentMethodId || ""}
+                                onValueChange={(value) => {
+                                  setRecurringPaymentMethodId(value);
+                                  setSelectedRecurringInstallmentId(null); // Reseta parcela ao mudar método
                                 }}
-                                // benefits={["Desconto de 6% em projetos de 12 meses ou mais"]} // Benefício precisa ser dinâmico da API
-                              />
-                              <CardOption
-                                title="Cartão Parcelado"
-                                description="Pague o valor total do contrato em parcelas"
-                                price={formatCurrency(selectedRecurringInstallmentDetails ? (recurringSubtotal * (selectedProjectDurationDetails?.months || 1) * (1-(selectedRecurringInstallmentDetails.discountPercentage/100))) / selectedRecurringInstallmentDetails.installment : 0 )}
-                                priceLabel="/parcela"
-                                isSelected={cardOption === "parcelado" && !!apiPaymentMethods.find(pm => pm.id === recurringPaymentMethod && pm.code === 'credit-card')}
-                                onClick={() => {
-                                  setCardOption("parcelado")
-                                  const creditCardMethod = apiPaymentMethods.find(pm => pm.code === 'credit-card');
-                                  if (creditCardMethod) setRecurringPaymentMethod(creditCardMethod.id);
-                                }}
-                                // badge={{ text: "Descontos de X% a Y%", color: "green" }} // Dinâmico da API
-                                // benefits={["Desconto de Z% em até N parcelas"]} // Dinâmico da API
-                              />
+                              >
+                                <SelectTrigger id="recurring-payment-method">
+                                  <SelectValue placeholder="Selecione o método de pagamento" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {apiPaymentMethods
+                                    .map((method) => (
+                                      <SelectItem key={method.id} value={method.id}>
+                                        {getPaymentMethodIcon(method.code)}
+                                        {method.name}
+                                      </SelectItem>
+                                    ))}
+                                </SelectContent>
+                              </Select>
                             </div>
-                            {cardOption === "parcelado" && (
-                              <div className="p-4 bg-white border rounded-lg">
-                                <div className="flex items-center justify-between mb-2">
-                                  <label className="text-sm font-medium block">Número de parcelas</label>
-                                  {!recurringInstallmentsSelected && (
-                                    <Badge variant="outline" className="text-red-500 border-red-200 bg-red-50">
-                                      <AlertCircle className="h-3 w-3 mr-1" />
-                                      Obrigatório
-                                    </Badge>
-                                  )}
-                                </div>
+
+                            {recurringPaymentMethodId && recurringInstallments.length > 0 && (
+                              <div className="space-y-2">
+                                <Label htmlFor="recurring-installments" className="font-medium">Parcelamento (Recorrente)</Label>
                                 <Select
-                                  value={selectedRecurringInstallmentId || ''}
-                                  onValueChange={(value) => handleRecurringInstallmentChange(value)}
+                                  value={selectedRecurringInstallmentId || ""}
+                                  onValueChange={setSelectedRecurringInstallmentId}
                                 >
-                                  <SelectTrigger className={cn("w-full", !recurringInstallmentsSelected && "border-red-300")}>
-                                    <SelectValue placeholder="Selecione o número de parcelas" />
+                                  <SelectTrigger id="recurring-installments">
+                                    <SelectValue placeholder="Selecione o parcelamento" />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    {apiInstallments
-                                      .filter(inst => inst.paymentMethodId === recurringPaymentMethod) // Filtrar parcelas para o método de pag. selecionado
-                                      .map(inst => (
-                                        <SelectItem key={inst.id} value={inst.id}>
-                                          {inst.installment}x 
-                                          {inst.discountPercentage > 0 && 
-                                            <span className="text-xs text-green-600 ml-1"> ({inst.discountPercentage}% off)</span>
-                                          }
-                                        </SelectItem>
+                                    {recurringInstallments.map((installment) => (
+                                      <SelectItem key={installment.id} value={installment.id}>
+                                        {installment.installment}x 
+                                        {installment.discountPercentage > 0 ? ` (-${installment.discountPercentage}%)` : ""}
+                                      </SelectItem>
                                     ))}
                                   </SelectContent>
                                 </Select>
                               </div>
                             )}
-                            <div className="p-4 bg-white border rounded-lg">
-                              <h4 className="text-sm font-medium mb-2">Cupom de desconto (opcional)</h4>
-                              <div className="flex gap-2">
+
+                            <div className="space-y-2 pt-4 border-t">
+                              <Label htmlFor="recurring-coupon" className="font-medium">Cupom de desconto (opcional)</Label>
+                              <div className="flex space-x-2">
                                 <input
+                                  id="recurring-coupon"
+                                  name="recurring-coupon"
                                   type="text"
                                   placeholder="Digite seu cupom"
-                                  className="flex-grow rounded-md border border-gray-300 p-2 h-10"
                                   value={recurringCouponCode}
                                   onChange={(e) => setRecurringCouponCode(e.target.value)}
-                                  disabled={!!recurringCouponInfo || applyingRecurringCoupon}
+                                  className="flex-grow"
                                 />
                                 <Button
                                   onClick={handleApplyRecurringCoupon}
-                                  disabled={!!recurringCouponInfo || applyingRecurringCoupon}
-                                  className="h-10"
+                                  disabled={applyingRecurringCoupon || !recurringCouponCode || !currentSession?.recurrentOfferId}
                                 >
-                                  {applyingRecurringCoupon ? <Loader2 className="h-4 w-4 animate-spin" /> : "Aplicar"}
+                                  {applyingRecurringCoupon ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                  Aplicar
                                 </Button>
                               </div>
                               {recurringCouponInfo && (
-                                <div className="mt-2 text-sm text-green-600">
-                                  Cupom "{recurringCouponInfo.code}" aplicado! Desconto de {recurringCouponInfo.discountPercentage}%
-                                </div>
+                                <p className="text-sm text-green-600">Cupom "{recurringCouponInfo.code}" aplicado: {recurringCouponInfo.discountPercentage}% de desconto.</p>
                               )}
-                            </div>
-                          </TabsContent>
-
-                          <TabsContent value="boleto-pix" className="space-y-4">
-                             {/* UI para Boleto/PIX - Selecionar qual (Boleto ou PIX) */}
-                             <RadioGroup
-                                value={recurringPaymentMethod || ''}
-                                onValueChange={(pmId) => {
-                                    setRecurringPaymentMethod(pmId);
-                                    setCardOption("recorrente"); // Reset card option if switching to boleto/pix
-                                    setSelectedRecurringInstallmentId(null); // Boleto/PIX geralmente não tem parcelamento complexo como cartão
-                                    // Pode ser necessário definir a frequência (à vista/recorrente) para boleto/pix aqui também
-                                    const selectedPm = apiPaymentMethods.find(p => p.id === pmId);
-                                    if (selectedPm?.code === 'boleto') setBoletoPixFrequency('recorrente'); // Exemplo
-                                    if (selectedPm?.code === 'pix') setBoletoPixFrequency('a-vista'); // Exemplo
-                                }}
-                                className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4"
-                                >
-                                {apiPaymentMethods.filter(pm => pm.code === 'boleto' || pm.code === 'pix').map(pm => (
-                                    <Label 
-                                        key={pm.id} 
-                                        htmlFor={`rec-${pm.id}`} 
-                                        className={`p-4 border rounded-lg cursor-pointer transition-all flex flex-col justify-between ${recurringPaymentMethod === pm.id ? "border-primary bg-primary/5" : "border-gray-200 hover:border-gray-300"}`}
-                                    >
-                                        <div className="flex items-center justify-between mb-2">
-                                            <h5 className="font-medium">{pm.name}</h5>
-                                            <RadioGroupItem value={pm.id} id={`rec-${pm.id}`} className="sr-only" />
-                                            {recurringPaymentMethod === pm.id && <Check className="h-5 w-5 text-primary" />}
-                                        </div>
-                                        <p className="text-sm text-gray-600 mb-2">{pm.description}</p>
-                                        {pm.discountPercentage > 0 && 
-                                            <Badge className="mt-auto bg-green-100 text-green-700 hover:bg-green-200 self-start">
-                                                {pm.discountPercentage}% de desconto
-                                            </Badge>
-                                        }
-                                    </Label>
-                                ))}
-                             </RadioGroup>
-                             {/* Lógica adicional para Boleto/PIX (ex: à vista/recorrente) pode ser necessária aqui */}
-                          </TabsContent>
-                        </Tabs>
-
-                        <div className="mt-6 pt-4 border-t">
-                          <div className="bg-gray-50 p-4 rounded-lg">
-                            <h4 className="font-medium text-base mb-3">Resumo de Pagamento Recorrente</h4>
-                            <div className="space-y-2">
-                              <div className="flex justify-between">
-                                <span className="text-gray-600">Subtotal mensal:</span>
-                                <span className="font-medium">{formatCurrency(recurringSubtotal)}</span>
-                              </div>
-                              {selectedProjectDurationDetails && (
-                                <div className="flex justify-between">
-                                  <span className="text-gray-600">Duração:</span>
-                                  <span className="font-medium">{selectedProjectDurationDetails.months} meses</span>
-                                </div>
-                              )}
-                              <div className="flex justify-between">
-                                <span className="text-gray-600">Total do Contrato (base):</span>
-                                <span className="font-bold">{formatCurrency(recurringSubtotal * (selectedProjectDurationDetails?.months || 1))}</span>
-                              </div>
-                              {/* Detalhes de descontos e total final precisam ser revistos com a lógica da API */}
-                            </div>
-                            <div className="mt-3 pt-3 border-t border-gray-200">
-                              <div className="flex justify-between">
-                                <span className="text-lg font-medium">Valor Total Estimado:</span>
-                                <span className="text-xl font-bold text-primary">
-                                  {formatCurrency(total)} {/* O 'total' aqui é a estimativa geral */}
-                                </span>
-                              </div>
                             </div>
                           </div>
+
+                          <div>
+                            <NewPaymentSummary
+                              monthlyValue={recurringMonthlySubtotal}
+                              totalMonths={selectedProjectDurationDetails?.months || 0}
+                              installments={recurringNumberOfInstallments}
+                              discounts={{
+                                installmentDiscount: recurringPaymentSummaryDiscounts.installmentDiscount,
+                                fidelityDiscount: isFidelizado ? 0.06 : 0,
+                                totalDiscount: recurringPaymentSummaryDiscounts.totalDiscount + (isFidelizado ? 0.06 : 0)
+                              }}
+                              fidelityEnabled={isFidelizado}
+                              onFidelityToggle={setIsFidelizado}
+                              
+                              oneTimeTotalValue={0}
+                              oneTimeInstallments={1}
+                              oneTimeDiscounts={{ installmentDiscount: 0, totalDiscount: 0 }}
+                              
+                              finalTotal={finalRecurringTotalAfterDiscounts}
+                            />
+                                        </div>
                         </div>
                       </div>
                     )}
 
-                    {/* One-Time Services Payment Section (precisa de refatoração similar à recorrente) */}
+                    {/* One-Time Services Payment Section */}
                     {oneTimeItems.length > 0 && (
                       <div className="rounded-lg bg-white p-6 shadow-sm mb-6">
                         <div className="flex items-center justify-between mb-4">
@@ -1149,24 +1332,100 @@ export default function CarrinhoPage() {
                           </div>
                         </div>
                         {renderOneTimeItemsTable()}
-                        {/* TODO: Adicionar Tabs e lógica de seleção de pagamento/parcelas para itens pontuais */}
-                        {/* Similar à seção recorrente, usando oneTimePaymentMethod, apiPaymentMethods, apiInstallments, etc. */}
-                        <div className="mt-6 pt-4 border-t">
-                          <div className="bg-gray-50 p-4 rounded-lg">
-                            <h4 className="font-medium text-base mb-3">Resumo de Pagamento Pontual</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-6">
+                          <div className="space-y-6">
+                            {/* Nova seleção de método de pagamento para pontuais */}
                              <div className="space-y-2">
+                              <Label htmlFor="onetime-payment-method" className="font-medium">Método de Pagamento (Pontual)</Label>
+                              <Select
+                                value={oneTimePaymentMethodId || ""}
+                                onValueChange={(value) => {
+                                  setOneTimePaymentMethodId(value);
+                                  setSelectedOneTimeInstallmentId(null); // Reseta parcela ao mudar método
+                                }}
+                              >
+                                <SelectTrigger id="onetime-payment-method">
+                                  <SelectValue placeholder="Selecione o método de pagamento" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {apiPaymentMethods.map((method) => (
+                                    <SelectItem key={method.id} value={method.id}>
+                                      {getPaymentMethodIcon(method.code)}
+                                      {method.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+
+                            {oneTimePaymentMethodId && oneTimeInstallments.length > 0 && (
+                              <div className="space-y-2">
+                                <Label htmlFor="onetime-installments" className="font-medium">Parcelamento (Pontual)</Label>
+                                <Select
+                                  value={selectedOneTimeInstallmentId || ""}
+                                  onValueChange={setSelectedOneTimeInstallmentId}
+                                >
+                                  <SelectTrigger id="onetime-installments">
+                                    <SelectValue placeholder="Selecione o parcelamento" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {oneTimeInstallments.map((installment) => (
+                                      <SelectItem key={installment.id} value={installment.id}>
+                                        {installment.installment}x
+                                        {installment.discountPercentage > 0 ? ` (-${installment.discountPercentage}%)` : ""}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            )}
+                            {/* Fim da nova seleção para pontuais */}
+
+                            <div className="space-y-2 pt-4 border-t">
+                              <Label htmlFor="onetime-coupon" className="font-medium">Cupom de desconto (Pontual - opcional)</Label>
+                              <div className="flex space-x-2">
+                                <input
+                                  id="onetime-coupon"
+                                  name="onetime-coupon"
+                                  type="text"
+                                  placeholder="Digite seu cupom"
+                                  value={oneTimeCouponCode}
+                                  onChange={(e) => setOneTimeCouponCode(e.target.value)}
+                                  className="flex-grow"
+                                />
+                                <Button
+                                  onClick={handleApplyOneTimeCoupon}
+                                  disabled={applyingOneTimeCoupon || !oneTimeCouponCode || !currentSession?.oneTimeOfferId}
+                                >
+                                  {applyingOneTimeCoupon ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                  Aplicar
+                                </Button>
+                              </div>
+                              {oneTimeCouponInfo && (
+                                <p className="text-sm text-green-600">Cupom "{oneTimeCouponInfo.code}" aplicado: {oneTimeCouponInfo.discountPercentage}% de desconto.</p>
+                              )}
+                            </div>
+                          </div>
+                          
+                          <div>
+                            {/* Reintroduzir e Melhorar o Resumo de Pagamento Pontual Manual */}
+                            <div className="mt-6 pt-4 border-t">
+                              <div className="bg-gray-50 p-4 rounded-lg space-y-3">
+                                <h4 className="font-semibold text-lg mb-2">Resumo de Serviços Pontuais</h4>
                                 <div className="flex justify-between">
-                                    <span className="text-gray-600">Subtotal Pontual:</span>
+                                    <span className="text-gray-700">Subtotal:</span>
                                     <span className="font-medium">{formatCurrency(oneTimeSubtotal)}</span>
                                 </div>
-                                {/* Detalhes de descontos e total final */} 
+                                {(oneTimePaymentSummaryDiscounts.totalDiscount > 0) && (
+                                    <div className="flex justify-between text-green-600">
+                                        <span className="text-sm">Descontos aplicados (parcela/cupom):</span>
+                                        <span className="text-sm font-medium">-{formatCurrency(oneTimeSubtotal * oneTimePaymentSummaryDiscounts.totalDiscount)}</span>
                              </div>
-                             <div className="mt-3 pt-3 border-t border-gray-200">
-                                <div className="flex justify-between">
-                                    <span className="text-lg font-medium">Valor Total Estimado:</span>
-                                    <span className="text-xl font-bold text-primary">
-                                    {formatCurrency(total)} {/* O 'total' aqui é a estimativa geral */}
-                                    </span>
+                                )}
+                                <div className="flex justify-between text-xl font-bold mt-2 pt-2 border-t">
+                                    <span className="text-gray-900">Total Pontual:</span>
+                                    <span className="text-primary">{formatCurrency(finalOneTimeTotalAfterDiscounts)}</span>
+                                </div>
                                 </div>
                             </div>
                           </div>
@@ -1174,36 +1433,187 @@ export default function CarrinhoPage() {
                       </div>
                     )}
                   </div>
+
+                  {/* Adicionar Total Geral do Pedido na Etapa 0, APÓS os cards de pagamento e ANTES dos botões de navegação da etapa */}
+                  {(recurringItems.length > 0 || oneTimeItems.length > 0) && ( 
+                    <div className="mt-8 p-6 bg-white rounded-lg shadow-md border border-gray-200">
+                      <h2 className="text-xl font-semibold text-gray-700 mb-4">Resumo Geral do Pedido</h2>
+                      
+                      {/* Valor Mensal Recorrente (se aplicável) */}
+                      {recurringItems.length > 0 && selectedProjectDurationDetails && selectedProjectDurationDetails.months > 0 && (
+                        <div className="flex justify-between items-center text-lg mb-2 pb-2 border-b border-gray-300">
+                          <span className="text-gray-700">Valor Mensal Líquido (Recorrente):</span>
+                          <span className="font-semibold text-gray-800">
+                            {formatCurrency(finalRecurringTotalAfterDiscounts / selectedProjectDurationDetails.months)}
+                            {selectedProjectDurationDetails.months > 1 ? " /mês" : ""}
+                          </span>
+                        </div>
+                      )}
+                      
+                      {/* Valor Total Pontual (se aplicável e se houver também recorrente, para clareza) */}
+                      {oneTimeItems.length > 0 && recurringItems.length > 0 && (
+                        <div className="flex justify-between items-center text-lg mb-2 pb-2 border-b border-gray-300">
+                          <span className="text-gray-700">Total Líquido (Serviços Pontuais):</span>
+                          <span className="font-semibold text-gray-800">
+                            {formatCurrency(finalOneTimeTotalAfterDiscounts)}
+                          </span>
+                        </div>
+                      )}
+
+                      <div className="flex justify-between items-center text-2xl font-bold mt-3">
+                        <span className="text-gray-800">Valor Total do Pedido:</span>
+                        <span className="text-primary">{formatCurrency(total)}</span>
+                      </div>
+                      <p className="text-sm text-gray-500 mt-2">
+                        Este valor inclui todos os itens e descontos selecionados. O resumo final detalhado será apresentado antes da confirmação.
+                      </p>
+                    </div>
+                  )}
                 </>
               )}
 
               {activeStep === 1 && (
-                <DatesStep onDateChange={handleDateChange} recurringFrequency={recurringFrequency} />
+                <DatesStep onDateChange={handleDateChange} />
               )}
 
               {activeStep === 2 && (
-                <>
-                  <h2 className="mb-4 text-lg font-medium">Resumo de Pagamento</h2>
-                  <PaymentSummary
-                    clientInfo={customerInfo} // Mockado
-                    projectInfo={{
-                      startDate: projectDates.startDate,
-                      firstPaymentDate: projectDates.firstPaymentDate,
-                      monthlyPaymentDay: projectDates.monthlyPaymentDay,
-                      items: items,
-                      // Os totais aqui devem refletir o que a API retornaria
-                      recurringTotal: recurringSubtotal * (selectedProjectDurationDetails?.months || 1), // Estimativa
-                      oneTimeTotal: oneTimeSubtotal, // Estimativa
-                      totalAmount: total, // Estimativa, o ideal é o total da API após checkout
-                      paymentMethod: 
-                        (selectedRecurringPaymentMethodDetails?.name || selectedOneTimePaymentMethodDetails?.name) || "N/A",
-                      installments: 
-                        (selectedRecurringInstallmentDetails?.installment || selectedOneTimeInstallmentDetails?.installment || 1)
-                    }}
-                    onPrint={handlePrintSummary}
-                    onDownload={handleDownloadSummary}
-                  />
-                </>
+                <div className="bg-white p-6 md:p-8 rounded-lg shadow-xl max-w-4xl mx-auto">
+                  {/* Cabeçalho */}
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 pb-4 border-b">
+                    <h2 className="text-2xl font-bold text-gray-800 mb-2 md:mb-0">Resumo do Plano de Pagamento</h2>
+                    <div className="flex space-x-3">
+                      <Button variant="outline" size="sm" onClick={handlePrintSummary}>
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 mr-2"><path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0110.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0A42.416 42.416 0 0012 18.75c-2.67 0-5.197-.973-7.022-2.592L3.042 18m11.918 0L12 18.75m-6.359 0L12 18.75m0 0A23.978 23.978 0 0112 21c-3.37 0-6.446-1.204-8.761-3.223L12 21c3.37 0 6.446-1.204 8.761-3.223zM12 12.375c-3.704 0-6.802-1.91-8.761-4.638L12 12.375c3.704 0 6.802-1.91 8.761-4.638L12 12.375z" /></svg>
+                        Imprimir
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={handleDownloadSummary}>
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 mr-2"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
+                        Baixar PDF
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Informações Cliente e Projeto */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 pb-4 border-b">
+                    <div>
+                      <h3 className="text-md font-semibold text-gray-700 mb-2">Informações do Cliente</h3>
+                      <p className="text-sm text-gray-600"><strong>{customerInfo.name}</strong></p>
+                      <p className="text-sm text-gray-600">CNPJ: {customerInfo.cnpj}</p>
+                      <p className="text-sm text-gray-600">Email: {customerInfo.email}</p>
+                      <p className="text-sm text-gray-600">Telefone: {customerInfo.phone}</p>
+                    </div>
+                    <div>
+                      <h3 className="text-md font-semibold text-gray-700 mb-2">Informações do Projeto</h3>
+                      <p className="text-sm text-gray-600">Data de Início: {formatDate(new Date(projectDates.startDate))}</p>
+                      <p className="text-sm text-gray-600">Primeiro Pagamento: {formatDate(new Date(projectDates.firstPaymentDate))}</p>
+                      <p className="text-sm text-gray-600">Dia de Pagamento Mensal: Dia {projectDates.monthlyPaymentDay}</p>
+                    </div>
+                  </div>
+
+                  {/* Serviços Contratados */}
+                  <div className="mb-6 pb-4 border-b">
+                    <h3 className="text-md font-semibold text-gray-700 mb-3">Serviços Contratados</h3>
+                    {recurringItems.length > 0 && (
+                      <div className="mb-3">
+                        <div className="flex justify-between items-center">
+                          <div>
+                            <span className="font-medium text-gray-800">Serviços Recorrentes</span>
+                            <Badge variant="destructive" className="ml-2 bg-red-500 text-white">Recorrente</Badge>
+                          </div>
+                          <span className="font-semibold text-gray-800">
+                            {formatCurrency(finalRecurringTotalAfterDiscounts / (selectedProjectDurationDetails?.months || 1))}/mês
+                          </span>
+                        </div>
+                        <ul className="list-disc list-inside pl-1 text-sm text-gray-600 mt-1">
+                          {recurringItems.map(item => <li key={item.id}>{item.name}</li>)}
+                        </ul>
+                        <p className="text-sm text-gray-500 mt-1">Método de pagamento: { (recurringPaymentMethodId && uiPaymentMethods.find(pm => pm.id === recurringPaymentMethodId)?.name) || "N/A" }</p>
+                      </div>
+                    )}
+                    {oneTimeItems.length > 0 && (
+                      <div className="mb-3">
+                        <div className="flex justify-between items-center">
+                          <div>
+                            <span className="font-medium text-gray-800">Serviços Pontuais</span>
+                            <Badge variant="outline" className="ml-2">Pontual</Badge>
+                          </div>
+                          <span className="font-semibold text-gray-800">{formatCurrency(finalOneTimeTotalAfterDiscounts)}</span>
+                        </div>
+                        <ul className="list-disc list-inside pl-1 text-sm text-gray-600 mt-1">
+                          {oneTimeItems.map(item => <li key={item.id}>{item.name}</li>)}
+                        </ul>
+                        <p className="text-sm text-gray-500 mt-1">Método de pagamento: { (oneTimePaymentMethodId && uiPaymentMethods.find(pm => pm.id === oneTimePaymentMethodId)?.name) || "N/A" }</p>
+                      </div>
+                    )}
+                    <div className="flex justify-between items-end mt-4 pt-3 border-t">
+                      <div>
+                        <p className="text-lg font-bold text-gray-800">Total:</p>
+                        {(selectedRecurringInstallmentDetails?.installment || selectedOneTimeInstallmentDetails?.installment || 0) > 1 && (
+                           <p className="text-sm text-gray-500">
+                             Parcelamento: {
+                               selectedRecurringInstallmentDetails?.installment || selectedOneTimeInstallmentDetails?.installment
+                             }x
+                           </p>
+                        )}
+                      </div>
+                      <p className="text-2xl font-bold text-primary">{formatCurrency(total)}</p>
+                    </div>
+                  </div>
+
+                  {/* Placeholder para Cronograma de Pagamentos */}
+                  <div className="mb-6 pb-4 border-b">
+                    <h3 className="text-md font-semibold text-gray-700 mb-3">Cronograma de Pagamentos</h3>
+                    {paymentSchedule.length > 0 ? (
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full text-sm">
+                          <thead>
+                            <tr className="border-b">
+                              <th className="p-2 text-left font-semibold text-gray-600">Data</th>
+                              <th className="p-2 text-right font-semibold text-gray-600">Valor</th>
+                              <th className="p-2 text-left font-semibold text-gray-600">Tipo</th>
+                              <th className="p-2 text-left font-semibold text-gray-600">Método de Pagamento</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {paymentSchedule.slice(0, showAllPayments ? paymentSchedule.length : initialPaymentEntries).map((entry, index) => (
+                              <tr key={index} className="border-b last:border-b-0 hover:bg-gray-50">
+                                <td className="p-2"><CalendarDays className="h-4 w-4 inline mr-1 text-gray-500" />{formatDate(entry.date)}</td>
+                                <td className="p-2 text-right font-medium">{formatCurrency(entry.amount)}</td>
+                                <td className="p-2">{entry.type}</td>
+                                <td className="p-2">{entry.paymentMethod}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        {paymentSchedule.length > initialPaymentEntries && (
+                          <div className="text-center mt-4">
+                            <Button variant="link" onClick={() => setShowAllPayments(!showAllPayments)} className="text-primary hover:text-primary/80">
+                              {showAllPayments ? "Mostrar menos" : `+ ${paymentSchedule.length - initialPaymentEntries} pagamentos adicionais não exibidos`}
+                              {showAllPayments ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />}
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="p-4 bg-gray-50 rounded text-center text-gray-500">
+                        <p>Não há pagamentos programados ou informações insuficientes para gerar o cronograma.</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Informações Importantes */}
+                  <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded">
+                    <h4 className="font-semibold text-yellow-800 mb-2">Informações Importantes</h4>
+                    <ul className="list-disc list-inside text-sm text-yellow-700 space-y-1">
+                      <li>Este resumo representa o plano de pagamento acordado entre as partes.</li>
+                      <li>As datas de pagamento podem variar de acordo com dias úteis e feriados.</li>
+                      <li>Pagamentos recorrentes serão cobrados automaticamente na data especificada.</li>
+                      <li>Em caso de dúvidas, entre em contato com nosso suporte financeiro.</li>
+                    </ul>
+                  </div>
+
+                  {/* Botões de Navegação (Voltar/Finalizar) - movidos para fora deste container principal pelo CSS do carrinho original */}
+                </div>
               )}
 
               <div className="mt-6 flex justify-between">

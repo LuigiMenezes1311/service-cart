@@ -74,10 +74,18 @@ export async function getDeliverables(): Promise<Deliverable[]> {
   return fetchFromApi<Deliverable[]>("/deliverables");
 }
 
-// Poderíamos adicionar funções para buscar itens individuais por ID se necessário:
-// export async function getProductById(id: string): Promise<Product> {
-//   return fetchFromApi<Product>(`/products/find/${id}`);
-// }
+export async function getProductById(productId: string): Promise<Product | null> {
+  try {
+    // A documentação indica /products/find/{id} para buscar por ID
+    const product = await fetchFromApi<Product>(`/products/find/${productId}`);
+    return product;
+  } catch (error) {
+    // Log o erro, mas retorna null para que o chamador possa lidar com produto não encontrado
+    // ou erro de API sem quebrar a aplicação inteira.
+    console.error(`Error fetching product by ID ${productId}:`, error);
+    return null;
+  }
+}
 
 // export async function getCategoryById(id: string): Promise<Category> {
 //   return fetchFromApi<Category>(`/categories/${id}`);

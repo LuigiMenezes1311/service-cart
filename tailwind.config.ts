@@ -25,7 +25,7 @@ const config = {
       },
       colors: {
         brandRed: {
-          DEFAULT: "#DC2626",
+          DEFAULT: "#F41C1C",
           dark: "#B91C1C",
         },
         customGreen: {

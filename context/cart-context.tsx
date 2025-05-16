@@ -1,21 +1,27 @@
 "use client"
 
-import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
+import { createContext, useContext, useState, useEffect, type ReactNode, useCallback } from "react"
 import type { CartItem, Product } from "@/types"
 import { salesApi } from "@/services/api"
-import { Session, Offer } from "@/types/payment"
+import { getProductById } from "@/lib/api"
+import { Session, Offer, OfferItem as ApiOfferItem } from "@/types/payment"
 import { toast } from "@/components/ui/use-toast"
+
+// Função para gerar um ID de lead do Salesforce aleatório para testes
+const generateRandomSalesforceLeadId = () => {
+  return `lead_test_${Math.random().toString(36).substring(2, 15)}`
+}
 
 interface CartContextType {
   items: CartItem[]
   itemCount: number
-  addToCart: (product: Product, quantity: number, selectedModifierValue?: string, modifierPrice?: number) => Promise<void>
+  addToCart: (product: Product, quantity?: number, selectedModifierValue?: string, modifierPrice?: number) => Promise<void>
   removeFromCart: (productId: string, selectedModifierValue?: string) => Promise<void>
   updateQuantity: (productId: string, selectedModifierValue: string | undefined, quantity: number) => Promise<void>
   isInCart: (productId: string, selectedModifierValue?: string) => boolean
   getItemTotal: (item: CartItem) => number
   getCartTotal: () => number
-  clearCart: () => void
+  clearCart: () => Promise<void>
   isCartReady: boolean
   currentSession: Session | null
   currentOffer: Offer | null
@@ -31,210 +37,518 @@ const SESSION_STORAGE_KEY = "v4CompanyCatalogSession"
 export function CartProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([])
   const [isCartReady, setIsCartReady] = useState(false)
-  const [currentSession, setCurrentSession] = useState<Session | null>(null)
-  const [currentOffer, setCurrentOffer] = useState<Offer | null>(null)
+  const [currentSession, setCurrentSessionState] = useState<Session | null>(null)
+  const [currentOffer, setCurrentOfferState] = useState<Offer | null>(null)
 
-  useEffect(() => {
-    const loadStoredData = async () => {
-      // Carregar carrinho
-      const savedCart = localStorage.getItem(CART_STORAGE_KEY)
-      if (savedCart) {
-        try {
-          const parsedCart = JSON.parse(savedCart) as CartItem[]
-          setItems(parsedCart)
-        } catch (error) {
-          console.error("Failed to parse cart from localStorage:", error)
-          setItems([])
-        }
-      }
-
-      // Carregar sessão
-      const savedSession = localStorage.getItem(SESSION_STORAGE_KEY)
-      if (savedSession) {
-        try {
-          const parsedSession = JSON.parse(savedSession) as Session
-          setCurrentSession(parsedSession)
-
-          // Carregar oferta atual se houver uma sessão
-          if (parsedSession.oneTimeOfferId) {
-            try {
-              const offer = await salesApi.getOffer(parsedSession.oneTimeOfferId)
-              setCurrentOffer(offer)
-            } catch (error) {
-              console.error("Failed to load offer:", error)
-              toast({
-                title: "Erro ao carregar oferta",
-                description: "Não foi possível recuperar os dados da sua oferta.",
-                variant: "destructive"
-              })
-            }
-          }
-        } catch (error) {
-          console.error("Failed to parse session from localStorage:", error)
-          setCurrentSession(null)
-        }
-      }
-
-      setIsCartReady(true)
-    }
-
-    loadStoredData()
-  }, [])
-
-  useEffect(() => {
-    if (isCartReady) {
-      localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(items))
-    }
-  }, [items, isCartReady])
-
-  useEffect(() => {
-    if (currentSession) {
-      localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(currentSession))
+  const setCurrentSession = useCallback((session: Session | null) => {
+    console.log("CartContext: setCurrentSession chamado com:", session);
+    setCurrentSessionState(session)
+    if (session) {
+      localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session))
     } else {
       localStorage.removeItem(SESSION_STORAGE_KEY)
     }
-  }, [currentSession])
+  }, [])
+
+  const setCurrentOffer = useCallback((offer: Offer | null) => {
+    console.log("CartContext: setCurrentOffer chamado com:", offer);
+    setCurrentOfferState(offer)
+  }, [])
+
+  const syncLocalCartFromApiOffer = useCallback(async (apiOffer: Offer, localCartForEnrichment: CartItem[]) => {
+    console.log(`CartContext: syncLocalCartFromApiOffer chamada para oferta tipo ${apiOffer.type}`, { apiOffer, localCartForEnrichment });
+    
+    const offerItemsFromApi = apiOffer.offerItems || [];
+    
+    const newLocalItemsPromises = offerItemsFromApi.map(async (apiItem: ApiOfferItem) => {
+      const localItemData = localCartForEnrichment.find(
+        localItem => localItem.id === apiItem.productId 
+      );
+
+      let productNameFromCatalogOrStorage = localItemData?.name;
+
+      if (!productNameFromCatalogOrStorage && apiItem.productId) {
+        console.log(`CartContext_syncLogic: Product ID ${apiItem.productId} - Nome não encontrado localmente, buscando na API de Catálogo...`);
+        try {
+          const productDetails = await getProductById(apiItem.productId);
+          if (productDetails && productDetails.name) {
+            productNameFromCatalogOrStorage = productDetails.name;
+            console.log(`CartContext_syncLogic: Product ID ${apiItem.productId} - Nome encontrado na API de Catálogo: "${productDetails.name}"`);
+          } else {
+            console.warn(`CartContext_syncLogic: Product ID ${apiItem.productId} - Nome não encontrado na API de Catálogo ou produto sem nome.`);
+          }
+        } catch (error) {
+          console.error(`CartContext_syncLogic: Product ID ${apiItem.productId} - Falha ao buscar detalhes do produto da API de Catálogo:`, error);
+        }
+      }
+
+      const finalName = productNameFromCatalogOrStorage || "Produto da Oferta";
+
+      console.log(`CartContext_syncLogic: Product ID: ${apiItem.productId}`);
+      console.log(`CartContext_syncLogic:   localItemData found: ${localItemData ? 'Yes' : 'No'}`);
+      if (localItemData) {
+        console.log(`CartContext_syncLogic:   localItemData.name (from localStorage/catalog): "${localItemData.name}"`);
+      }
+      console.log(`CartContext_syncLogic:   finalName selected: "${finalName}"`);
+
+      return {
+        id: apiItem.productId,
+        name: finalName, 
+        description: localItemData?.description || "",
+        paymentType: apiOffer.type,
+        status: localItemData?.status || "ACTIVE",
+        singleItemOnly: localItemData?.singleItemOnly || false,
+        categoryId: localItemData?.categoryId || "",
+        prices: localItemData?.prices && localItemData.prices.length > 0 
+                ? localItemData.prices 
+                : [{ id: apiItem.priceId, amount: apiItem.price, currencyId: "BRL", modifierTypeId: null }],
+        deliverables: localItemData?.deliverables || [],
+        guidelines: localItemData?.guidelines || [],
+        createdBy: localItemData?.createdBy || "",
+        createdAt: localItemData?.createdAt || new Date().toISOString(),
+        updatedAt: localItemData?.updatedAt || new Date().toISOString(),
+        image: localItemData?.image,
+        displayPrice: apiItem.price, 
+        quantity: apiItem.quantity,
+        selectedModifierValue: localItemData?.selectedModifierValue, 
+      };
+    });
+
+    const newLocalItems = await Promise.all(newLocalItemsPromises);
+
+    const otherTypeItems = localCartForEnrichment.filter(localItem => {
+      return localItem.paymentType !== apiOffer.type && 
+             !offerItemsFromApi.some(apiItem => apiItem.productId === localItem.id);
+    });
+
+    const finalItems = [...newLocalItems, ...otherTypeItems];
+    
+    setItems(finalItems);
+    localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(finalItems)); 
+    console.log("CartContext: Carrinho local sincronizado com oferta da API (setItems e localStorage atualizados):", finalItems);
+  }, []);
+
+
+  const initializeSessionAndOffer = useCallback(async () => {
+    console.log("CartContext: Iniciando initializeSessionAndOffer...");
+    setIsCartReady(false);
+    let session: Session | null = null
+    const savedSessionData = localStorage.getItem(SESSION_STORAGE_KEY)
+    const savedCartData = localStorage.getItem(CART_STORAGE_KEY);
+    const localCartForEnrichment = savedCartData ? (JSON.parse(savedCartData) as CartItem[]) : [];
+
+    if (savedSessionData) {
+      try {
+        session = JSON.parse(savedSessionData) as Session
+        console.log("CartContext: Sessão carregada do localStorage:", session);
+        if (!session || (!session.id || (!session.oneTimeOfferId && !session.recurrentOfferId))) {
+          console.warn("CartContext: Sessão do localStorage inválida (sem id ou IDs de oferta), descartando.")
+          session = null
+          localStorage.removeItem(SESSION_STORAGE_KEY)
+        }
+      } catch (error) {
+        console.error("CartContext: Falha ao parsear sessão do localStorage, criando nova:", error)
+        session = null
+        localStorage.removeItem(SESSION_STORAGE_KEY)
+      }
+    }
+
+    if (!session) {
+      try {
+        console.log("CartContext: Nenhuma sessão válida encontrada/carregada, criando nova sessão via API...")
+        const salesforceLeadId = localStorage.getItem('salesforceLeadId') || generateRandomSalesforceLeadId();
+        if(localStorage.getItem('salesforceLeadId') == null) localStorage.setItem('salesforceLeadId', salesforceLeadId)
+        session = await salesApi.createSession("Visitante Catálogo Inicial", salesforceLeadId)
+        console.log("CartContext: Nova sessão criada pela API:", session);
+        if (!session || !session.id) {
+          throw new Error("API did not return a valid session with an ID.")
+        }
+        setCurrentSession(session)
+          } catch (error) {
+        console.error("CartContext: Erro crítico ao criar sessão inicial via API:", error)
+            toast({
+          title: "Erro ao iniciar carrinho",
+          description: "Não foi possível criar uma sessão de compras. Tente recarregar a página.",
+          variant: "destructive",
+          duration: 5000
+        })
+        setIsCartReady(true) 
+        return
+      }
+    } else {
+      console.log("CartContext: Usando sessão existente:", session);
+      setCurrentSessionState(session)
+    }
+    
+    const activeSession = session; 
+
+    if (!activeSession || (!activeSession.oneTimeOfferId && !activeSession.recurrentOfferId)) {
+      console.error("CartContext: ERRO PÓS INICIALIZAÇÃO - Sessão NÃO possui os IDs de oferta necessários.", activeSession);
+    } else {
+      console.log("CartContext: Sessão parece OK, possui IDs de oferta:", { oneTime: activeSession.oneTimeOfferId, recurrent: activeSession.recurrentOfferId });
+    }
+
+    let oneTimeOfferFromApi: Offer | null = null;
+    if (activeSession && activeSession.oneTimeOfferId) {
+      try {
+        console.log(`CartContext: Tentando carregar oferta ONE_TIME ID: ${activeSession.oneTimeOfferId}`);
+        const offerCandidate = await salesApi.getOffer(activeSession.oneTimeOfferId);
+        if (offerCandidate && !(offerCandidate.statusCode && offerCandidate.statusCode >= 400 || offerCandidate.errors)) {
+          oneTimeOfferFromApi = offerCandidate;
+          console.log("CartContext: Oferta ONE_TIME carregada.");
+        } else {
+          console.warn(`CartContext: Oferta ONE_TIME (${activeSession.oneTimeOfferId}) inválida ou erro:`, offerCandidate);
+        }
+      } catch (error) {
+        console.error(`CartContext: Erro ao carregar oferta ONE_TIME ${activeSession.oneTimeOfferId}:`, error);
+      }
+    }
+
+    let recurrentOfferFromApi: Offer | null = null;
+    if (activeSession && activeSession.recurrentOfferId) {
+      try {
+        console.log(`CartContext: Tentando carregar oferta RECURRENT ID: ${activeSession.recurrentOfferId}`);
+        const offerCandidate = await salesApi.getOffer(activeSession.recurrentOfferId);
+        if (offerCandidate && !(offerCandidate.statusCode && offerCandidate.statusCode >= 400 || offerCandidate.errors)) {
+          recurrentOfferFromApi = offerCandidate;
+          console.log("CartContext: Oferta RECURRENT carregada.");
+        } else {
+          console.warn(`CartContext: Oferta RECURRENT (${activeSession.recurrentOfferId}) inválida ou erro:`, offerCandidate);
+        }
+      } catch (error) {
+        console.error(`CartContext: Erro ao carregar oferta RECURRENT ${activeSession.recurrentOfferId}:`, error);
+      }
+    }
+    
+    const offerToUseForCurrentState = oneTimeOfferFromApi || recurrentOfferFromApi;
+    setCurrentOffer(offerToUseForCurrentState);
+
+
+    const offerForInitialSync = oneTimeOfferFromApi || recurrentOfferFromApi;
+
+    if (offerForInitialSync && offerForInitialSync.offerItems && offerForInitialSync.offerItems.length > 0) {
+      console.log("CartContext: Sincronizando carrinho local com oferta ativa da API:", offerForInitialSync.type);
+      await syncLocalCartFromApiOffer(offerForInitialSync, localCartForEnrichment);
+    } else if (localCartForEnrichment.length > 0) {
+      console.log("CartContext: Nenhuma oferta ativa da API com itens, usando carrinho do localStorage.");
+      setItems(localCartForEnrichment);
+    } else {
+      console.log("CartContext: Nenhuma oferta da API com itens e nenhum carrinho no localStorage, carrinho vazio.");
+      setItems([]);
+    }
+    setIsCartReady(true);
+    console.log("CartContext: initializeSessionAndOffer concluído. Cart is ready.");
+  }, [setCurrentSession, syncLocalCartFromApiOffer]);
+
+
+  useEffect(() => {
+    if (!isCartReady && currentSession === null) {
+        initializeSessionAndOffer();
+    }
+  }, [initializeSessionAndOffer]);
+
+
+  const clearCart = useCallback(async () => {
+    console.log("CartContext: clearCart chamado. Limpando items, currentOffer, currentSession e localStorage...");
+    setItems([])
+    setCurrentOfferState(null) 
+    setCurrentSessionState(null)
+    localStorage.removeItem(CART_STORAGE_KEY)
+    localStorage.removeItem(SESSION_STORAGE_KEY)
+    
+    console.log("CartContext: clearCart - Chamando initializeSessionAndOffer para recriar a sessão.");
+    await initializeSessionAndOffer();
+  }, [initializeSessionAndOffer])
+
 
   const itemCount = items.reduce((count, item) => count + item.quantity, 0)
 
   const addToCart = async (product: Product, quantity: number = 1, selectedModifierValue?: string, modifierPrice?: number) => {
-    if (!currentSession || !currentOffer) {
+    console.log("addToCart: Iniciado para produto:", product.name, "Tipo:", product.paymentType, "SingleItemOnly:", product.singleItemOnly);
+
+    if (product.singleItemOnly) {
+      const currentLocalItemsForCheck = JSON.parse(localStorage.getItem(CART_STORAGE_KEY) || "[]") as CartItem[];
+      const existingItemInStorage = currentLocalItemsForCheck.find(item => item.id === product.id);
+      
+      if (existingItemInStorage) {
       toast({
-        title: "Erro ao adicionar ao carrinho",
-        description: "Sessão não iniciada ou oferta não encontrada.",
-        variant: "destructive"
-      })
-      return
+          title: "Item já no carrinho",
+          description: `"${product.name}" só pode ser adicionado uma vez.`,
+          variant: "default",
+          duration: 3000
+        });
+        return;
+      }
+    }
+
+    if (!currentSession || (!currentSession.oneTimeOfferId && !currentSession.recurrentOfferId)) {
+      toast({ title: "Erro", description: "Sessão ou ofertas não inicializadas corretamente.", variant: "destructive" });
+      console.error("addToCart: Tentativa de adicionar ao carrinho sem sessão ou IDs de oferta válidos.");
+      return;
+    }
+
+    const offerId = product.paymentType === "RECURRENT" ? currentSession.recurrentOfferId : currentSession.oneTimeOfferId;
+    if (!offerId) {
+      toast({ title: "Erro", description: `ID da oferta para ${product.paymentType} não encontrado na sessão.`, variant: "destructive" });
+      console.error(`addToCart: ID da oferta para ${product.paymentType} não encontrado.`);
+      return;
+    }
+
+    const priceToUse = modifierPrice !== undefined ? modifierPrice : product.displayPrice;
+    const priceId = product.prices.find(p => p.amount === priceToUse)?.id || product.prices[0]?.id;
+
+    if (!priceId) {
+        toast({ title: "Erro de Produto", description: "Não foi possível determinar o ID do preço para este produto/modificador.", variant: "destructive" });
+        console.error("addToCart: PriceId não encontrado para o produto:", product);
+        return;
     }
 
     try {
-      const updatedOffer = await salesApi.addOfferItem(
-        currentOffer.id,
-        product.id,
-        product.prices[0].id,
-        quantity
-      )
-      setCurrentOffer(updatedOffer)
+      console.log(`addToCart: Chamando salesApi.addOfferItem para offerId: ${offerId}, productId: ${product.id}, priceId: ${priceId}`);
+      const updatedOfferFromApi = await salesApi.addOfferItem(offerId, product.id, priceId, quantity);
 
-      setItems((prevItems) => {
-        const existingItemIndex = prevItems.findIndex(
-          (item) => item.id === product.id && item.selectedModifierValue === selectedModifierValue
-        )
+      if (updatedOfferFromApi && !(updatedOfferFromApi.statusCode >= 400 || updatedOfferFromApi.errors)) {
+        console.log("addToCart: Item adicionado à oferta pela API com sucesso:", updatedOfferFromApi);
+        toast({ title: "Item adicionado!", description: `"${product.name}" foi adicionado ao seu carrinho.`, duration: 2000 });
 
-        const productPrice = modifierPrice !== undefined ? modifierPrice : (product.displayPrice || product.prices[0]?.amount || 0)
+        const newCartItem: CartItem = {
+          id: product.id,
+          name: product.name,
+          description: product.description,
+          quantity: quantity, 
+          displayPrice: priceToUse,
+          paymentType: product.paymentType,
+          singleItemOnly: product.singleItemOnly,
+          status: product.status,
+          categoryId: product.categoryId,
+          prices: product.prices,
+          deliverables: product.deliverables,
+          guidelines: product.guidelines,
+          createdBy: product.createdBy,
+          createdAt: product.createdAt || new Date().toISOString(),
+          updatedAt: product.updatedAt || new Date().toISOString(),
+          image: product.image,
+          selectedModifierValue: selectedModifierValue,
+        };
 
-        if (existingItemIndex >= 0) {
-          const updatedItems = [...prevItems]
-          updatedItems[existingItemIndex].quantity += quantity
-          return updatedItems
-        } else {
-          const newItem: CartItem = {
-            ...product,
-            quantity: quantity,
-            displayPrice: productPrice,
-            selectedModifierValue: selectedModifierValue,
-          }
-          return [...prevItems, newItem]
+        let localItemsForStorage: CartItem[] = [];
+        const savedCartData = localStorage.getItem(CART_STORAGE_KEY);
+        if (savedCartData) {
+          localItemsForStorage = JSON.parse(savedCartData) as CartItem[];
         }
-      })
+        
+        const existingItemIndex = localItemsForStorage.findIndex(item => item.id === newCartItem.id && item.paymentType === newCartItem.paymentType);
+        if (existingItemIndex > -1) {
+          localItemsForStorage[existingItemIndex].quantity = updatedOfferFromApi.offerItems.find(oi => oi.productId === newCartItem.id)?.quantity || newCartItem.quantity;
+          localItemsForStorage[existingItemIndex].name = newCartItem.name;
+          localItemsForStorage[existingItemIndex].description = newCartItem.description;
+        } else {
+          localItemsForStorage.push(newCartItem);
+        }
+        localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(localItemsForStorage));
+        console.log("addToCart: localStorage (CART_STORAGE_KEY) atualizado com o novo item:", localItemsForStorage);
+
+        setCurrentOffer(updatedOfferFromApi);
+        syncLocalCartFromApiOffer(updatedOfferFromApi, localItemsForStorage);
+
+      } else {
+        console.error("addToCart: Erro ao adicionar item à oferta pela API:", updatedOfferFromApi);
+        const errorMessage = (updatedOfferFromApi?.errors?.[0]?.message) || "Não foi possível adicionar o item.";
+        const errorCode = updatedOfferFromApi?.errors?.[0]?.code;
+
+        if (errorCode === "PRODUCT_ALREADY_ADDED" && product.singleItemOnly) {
+             toast({
+                title: "Item já existe",
+                description: `"${product.name}" já está no carrinho e só pode ser adicionado uma vez.`,
+                variant: "destructive"
+            });
+        } else {
+            toast({
+                title: "Erro ao adicionar",
+                description: errorMessage,
+                variant: "destructive"
+            });
+        }
+      }
     } catch (error) {
-      console.error("Failed to add item to offer:", error)
-      toast({
-        title: "Erro ao adicionar item",
-        description: "Não foi possível adicionar o item ao carrinho.",
-        variant: "destructive"
-      })
+      console.error("addToCart: Exceção ao adicionar item:", error);
+      toast({ title: "Erro inesperado", description: "Ocorreu um problema ao adicionar o item ao carrinho.", variant: "destructive" });
     }
-  }
+  };
 
   const removeFromCart = async (productId: string, selectedModifierValue?: string) => {
-    if (!currentOffer) {
-      toast({
-        title: "Erro ao remover do carrinho",
-        description: "Oferta não encontrada.",
-        variant: "destructive"
-      })
-      return
+    const itemInContext = items.find(i => i.id === productId && i.selectedModifierValue === selectedModifierValue);
+    if (!itemInContext) {
+      console.warn("removeFromCart: Tentativa de remover item não encontrado no estado local do carrinho.");
+      toast({title: "Item não encontrado", description: "Este item não parece estar no seu carrinho.", variant: "default"});
+      return;
+    }
+    const localCartSnapshot = [...items];
+
+    let offerIdToUse: string | null = null;
+    if (currentSession) {
+      offerIdToUse = itemInContext.paymentType === "RECURRENT" ? currentSession.recurrentOfferId : currentSession.oneTimeOfferId;
     }
 
-    const itemToRemove = currentOffer.offerItems.find(item => item.productId === productId)
-    if (!itemToRemove) {
-      console.error("Item not found in offer")
-      return
+    if (!offerIdToUse) {
+      toast({ title: "Erro ao remover", description: "Sessão ou ID da oferta não encontrado para este item.", variant: "destructive" });
+      return;
+    }
+    
+    let offerToSyncFrom = currentOffer;
+    if (!offerToSyncFrom || offerToSyncFrom.id !== offerIdToUse || offerToSyncFrom.errors) {
+      try {
+        console.log(`removeFromCart: currentOffer (ID: ${offerToSyncFrom?.id}) não é a oferta alvo (ID: ${offerIdToUse}) ou está corrompida. Carregando oferta alvo...`);
+        offerToSyncFrom = await salesApi.getOffer(offerIdToUse);
+        if (!offerToSyncFrom || offerToSyncFrom.errors) {
+          console.error("removeFromCart: Falha ao carregar oferta alvo ou oferta carregada é inválida:", offerToSyncFrom);
+          toast({ title: "Erro ao remover", description: "Não foi possível carregar dados da oferta.", variant: "destructive" });
+          return;
+        }
+      } catch (err) {
+        console.error(`removeFromCart: Falha crítica ao carregar oferta ${offerIdToUse}.`, err);
+        toast({ title: "Erro ao remover", description: "Erro de rede ao buscar dados da oferta.", variant: "destructive" });
+        return;
+      }
+    }
+
+    const offerItemToRemove = offerToSyncFrom.offerItems.find(oi => oi.productId === productId);
+    
+    if (!offerItemToRemove) {
+      console.warn("removeFromCart: Item não encontrado na oferta da API. Removendo apenas do estado local (pode indicar dessincronia).");
+      syncLocalCartFromApiOffer(offerToSyncFrom, localCartSnapshot.filter(item => !(item.id === productId && item.selectedModifierValue === selectedModifierValue)));
+      toast({ title: "Item já não estava na oferta", description: "O item foi removido do seu carrinho local.", variant: "default" });
+      return;
     }
 
     try {
-      const updatedOffer = await salesApi.removeOfferItem(currentOffer.id, itemToRemove.id)
-      setCurrentOffer(updatedOffer)
+      console.log(`removeFromCart: Chamando salesApi.removeOfferItem com offerId: ${offerToSyncFrom.id}, offerItemId: ${offerItemToRemove.id}`);
+      const updatedOfferFromApi = await salesApi.removeOfferItem(offerToSyncFrom.id, offerItemToRemove.id);
+      
+      if (updatedOfferFromApi && (updatedOfferFromApi.statusCode >= 400 || updatedOfferFromApi.errors)) {
+        const apiErrorMessage = updatedOfferFromApi.errors?.[0]?.message || updatedOfferFromApi.message || "Não foi possível remover o item da oferta.";
+        console.error("removeFromCart: Erro ao remover item da oferta pela API:", updatedOfferFromApi);
+        toast({ title: "Erro ao Remover Item da API", description: apiErrorMessage, variant: "destructive" });
+        const offerToAttemptSync = await salesApi.getOffer(offerToSyncFrom.id);
+        setCurrentOffer(offerToAttemptSync);
+        syncLocalCartFromApiOffer(offerToAttemptSync, localCartSnapshot.filter(item => !(item.id === productId && item.selectedModifierValue === selectedModifierValue)) );
 
-      setItems((prevItems) =>
-        prevItems.filter(
-          (item) => !(item.id === productId && item.selectedModifierValue === selectedModifierValue)
-        )
-      )
+        return; 
+      }
+
+      console.log("removeFromCart: Item removido com sucesso da oferta pela API. Resposta:", updatedOfferFromApi);
+      setCurrentOffer(updatedOfferFromApi);
+      syncLocalCartFromApiOffer(updatedOfferFromApi, localCartSnapshot.filter(item => !(item.id === productId && item.selectedModifierValue === selectedModifierValue)) );
+      toast({ title: "Item removido do carrinho!", duration: 2000 });
     } catch (error) {
-      console.error("Failed to remove item from offer:", error)
+      console.error("removeFromCart: Falha inesperada ao remover item:", error);
       toast({
-        title: "Erro ao remover item",
-        description: "Não foi possível remover o item do carrinho.",
+        title: "Erro Inesperado no Carrinho",
+        description: (error instanceof Error ? error.message : "Não foi possível remover o item."),
         variant: "destructive"
-      })
+      });
+      if(offerToSyncFrom) syncLocalCartFromApiOffer(offerToSyncFrom, localCartSnapshot);
     }
   }
 
-  const updateQuantity = async (productId: string, selectedModifierValue: string | undefined, quantity: number) => {
-    if (!currentOffer) {
-      toast({
-        title: "Erro ao atualizar quantidade",
-        description: "Oferta não encontrada.",
-        variant: "destructive"
-      })
-      return
+  const updateQuantity = async (productId: string, selectedModifierValue: string | undefined, newQuantity: number) => {
+    console.log(`updateQuantity: Iniciando para productId: ${productId}, newQuantity: ${newQuantity}`);
+    const itemInCart = items.find(i => i.id === productId && i.selectedModifierValue === selectedModifierValue);
+    if (!itemInCart) {
+      console.warn("updateQuantity: Item não encontrado no carrinho local.");
+      toast({ title: "Erro", description: "Item não encontrado para atualizar.", variant: "destructive" });
+      return;
+    }
+    const localCartSnapshot = [...items];
+
+    let offerIdToUse: string | null = null;
+    if (currentSession) {
+      offerIdToUse = itemInCart.paymentType === "RECURRENT" ? currentSession.recurrentOfferId : currentSession.oneTimeOfferId;
     }
 
-    const offerItem = currentOffer.offerItems.find(item => item.productId === productId)
-    if (!offerItem) {
-      console.error("Item not found in offer")
-      return
+    if (!offerIdToUse) {
+      toast({ title: "Erro ao atualizar", description: "Sessão ou ID da oferta não encontrado.", variant: "destructive" });
+      return;
     }
+
+    let offerToModify = currentOffer;
+    if (!offerToModify || offerToModify.id !== offerIdToUse || offerToModify.errors) {
+      try {
+        console.log(`updateQuantity: currentOffer (ID: ${offerToModify?.id}) não é a oferta alvo (ID: ${offerIdToUse}) ou está corrompida. Carregando...`);
+        offerToModify = await salesApi.getOffer(offerIdToUse);
+        if (!offerToModify || offerToModify.errors) throw new Error("Falha ao carregar oferta alvo ou oferta inválida.");
+      } catch (err) {
+        console.error(`updateQuantity: Falha crítica ao carregar oferta ${offerIdToUse}.`, err);
+        toast({ title: "Erro", description: "Não foi possível carregar dados da oferta para atualizar.", variant: "destructive" });
+        return;
+      }
+    }
+    
+    const offerItemToUpdate = offerToModify.offerItems.find(oi => oi.productId === productId);
+
+    if (!offerItemToUpdate && newQuantity > 0) {
+        console.error("updateQuantity: Item não encontrado na oferta da API, mas quantidade > 0. Isso não deveria acontecer se o item está no carrinho local. Tentando adicionar como novo.");
+        const localProductData = items.find(i => i.id === productId);
+        const priceId = localProductData?.prices[0]?.id;
+        if (priceId) {
+            await salesApi.addOfferItem(offerIdToUse, productId, priceId, newQuantity);
+             const latestOffer = await salesApi.getOffer(offerIdToUse);
+             setCurrentOffer(latestOffer);
+             syncLocalCartFromApiOffer(latestOffer, localCartSnapshot);
+        } else {
+            toast({ title: "Erro", description: "Não foi possível atualizar o item, dados do produto local incompletos.", variant: "destructive" });
+        }
+        return;
+    }
+    
+    if (newQuantity === 0 && !offerItemToUpdate) {
+        console.log("updateQuantity: Quantidade é 0 e item não está na oferta da API. Removendo localmente.");
+        syncLocalCartFromApiOffer(offerToModify, localCartSnapshot.filter(item => item.id !== productId || item.selectedModifierValue !== selectedModifierValue));
+        toast({ title: "Item removido", duration: 1500 });
+        return;
+    }
+
 
     try {
-      // Remove o item se a quantidade for 0
-      if (quantity === 0) {
-        await removeFromCart(productId, selectedModifierValue)
-        return
-      }
+      let finalUpdatedOffer: Offer;
 
-      // Atualiza a quantidade adicionando/removendo itens conforme necessário
-      const currentQuantity = offerItem.quantity
-      const quantityDiff = quantity - currentQuantity
-
-      if (quantityDiff > 0) {
-        // Adiciona mais unidades
-        await salesApi.addOfferItem(currentOffer.id, productId, offerItem.priceId, quantityDiff)
-      } else if (quantityDiff < 0) {
-        // Remove unidades
-        await salesApi.removeOfferItem(currentOffer.id, offerItem.id)
-        if (quantity > 0) {
-          await salesApi.addOfferItem(currentOffer.id, productId, offerItem.priceId, quantity)
+      if (newQuantity === 0) {
+        if (offerItemToUpdate) {
+          console.log(`updateQuantity: Quantidade é 0. Removendo item ${offerItemToUpdate.id} da oferta ${offerToModify.id}`);
+          finalUpdatedOffer = await salesApi.removeOfferItem(offerToModify.id, offerItemToUpdate.id);
+        } else {
+          finalUpdatedOffer = offerToModify;
         }
+      } else if (offerItemToUpdate) {
+        console.log(`updateQuantity: Atualizando quantidade. Removendo item ${offerItemToUpdate.id} e adicionando com quantidade ${newQuantity}`);
+        await salesApi.removeOfferItem(offerToModify.id, offerItemToUpdate.id);
+        finalUpdatedOffer = await salesApi.addOfferItem(offerToModify.id, productId, offerItemToUpdate.priceId, newQuantity);
+      } else {
+         console.log(`updateQuantity: Item não está na oferta. Adicionando productId ${productId} com quantidade ${newQuantity}`);
+         const priceId = itemInCart.prices[0]?.id;
+         if(!priceId) throw new Error ("Não foi possível encontrar priceId para adicionar novo item in updateQuantity.")
+         finalUpdatedOffer = await salesApi.addOfferItem(offerToModify.id, productId, priceId, newQuantity);
+      }
+      
+      if (finalUpdatedOffer && (finalUpdatedOffer.statusCode >= 400 || finalUpdatedOffer.errors)) {
+        console.error("updateQuantity: Erro da API ao atualizar/adicionar/remover item:", finalUpdatedOffer);
+        toast({ title: "Erro ao Atualizar", description: finalUpdatedOffer.errors?.[0]?.message || "Não foi possível atualizar a quantidade na API.", variant: "destructive"});
+        syncLocalCartFromApiOffer(offerToModify, localCartSnapshot); 
+      } else {
+        console.log("updateQuantity: Operação na API bem-sucedida:", finalUpdatedOffer);
+        setCurrentOffer(finalUpdatedOffer);
+        syncLocalCartFromApiOffer(finalUpdatedOffer, localCartSnapshot);
+        toast({ title: "Quantidade atualizada!", duration: 1500 });
       }
 
-      // Atualiza o estado local
-      setItems((prevItems) =>
-        prevItems.map((item) =>
-          item.id === productId && item.selectedModifierValue === selectedModifierValue
-            ? { ...item, quantity: Math.max(0, quantity) }
-            : item
-        ).filter(item => item.quantity > 0)
-      )
     } catch (error) {
-      console.error("Failed to update item quantity:", error)
+      console.error("updateQuantity: Falha inesperada:", error);
       toast({
         title: "Erro ao atualizar quantidade",
-        description: "Não foi possível atualizar a quantidade do item.",
+        description: (error instanceof Error ? error.message : "Falha desconhecida."),
         variant: "destructive"
-      })
+      });
+      if(offerToModify) syncLocalCartFromApiOffer(offerToModify, localCartSnapshot);
     }
   }
 
@@ -248,13 +562,6 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const getCartTotal = () => {
     return items.reduce((sum, item) => sum + getItemTotal(item), 0)
-  }
-
-  const clearCart = () => {
-    setItems([])
-    setCurrentOffer(null)
-    setCurrentSession(null)
-    localStorage.removeItem(SESSION_STORAGE_KEY)
   }
 
   return (
@@ -288,4 +595,5 @@ export function useCart() {
   }
   return context
 }
+
 

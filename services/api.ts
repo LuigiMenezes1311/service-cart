@@ -32,9 +32,14 @@ export const salesApi = {
   },
 
   closeSession: async (sessionId: string): Promise<Session> => {
+    // Para PUT sem corpo, não enviar Content-Type, pois pode causar "Invalid JSON body" em algumas APIs.
+    const headersWithoutContentType = { ...defaultHeaders };
+    delete headersWithoutContentType['Content-Type'];
+
     const response = await fetch(`${API_SALES_URL}/sessions/${sessionId}/close`, {
       method: 'PUT',
-      headers: defaultHeaders
+      headers: Object.keys(headersWithoutContentType).length > 0 ? headersWithoutContentType : undefined
+      // Não há body para esta requisição PUT conforme doc.txt
     });
     return response.json();
   },
@@ -44,6 +49,14 @@ export const salesApi = {
     const response = await fetch(`${API_SALES_URL}/offers/${offerId}`, {
       headers: defaultHeaders
     });
+    if (!response.ok) {
+      try {
+        const errorBody = await response.clone().json();
+        console.error(`salesApi.getOffer: Erro ${response.status} ao buscar oferta ${offerId}. Corpo:`, JSON.stringify(errorBody, null, 2));
+      } catch (e) {
+        console.error(`salesApi.getOffer: Erro ${response.status} ao buscar oferta ${offerId}. Não foi possível parsear corpo do erro.`);
+      }
+    }
     return response.json();
   },
 
@@ -53,14 +66,35 @@ export const salesApi = {
       headers: defaultHeaders,
       body: JSON.stringify({ offerId, productId, priceId, quantity })
     });
+    if (!response.ok) {
+      try {
+        const errorBody = await response.clone().json();
+        console.error(`salesApi.addOfferItem: Erro ${response.status}. Corpo:`, JSON.stringify(errorBody, null, 2));
+      } catch (e) {
+        console.error(`salesApi.addOfferItem: Erro ${response.status}. Não foi possível parsear corpo do erro.`);
+      }
+    }
     return response.json();
   },
 
   removeOfferItem: async (offerId: string, offerItemId: string): Promise<Offer> => {
+    // Para DELETE, não enviar Content-Type se não houver corpo, pois pode causar "Invalid JSON body" em algumas APIs.
+    const headersWithoutContentType = { ...defaultHeaders };
+    delete headersWithoutContentType['Content-Type']; // Remover Content-Type para esta chamada específica
+
     const response = await fetch(`${API_SALES_URL}/offers/${offerId}/items/${offerItemId}`, {
       method: 'DELETE',
-      headers: defaultHeaders
+      headers: Object.keys(headersWithoutContentType).length > 0 ? headersWithoutContentType : undefined // Enviar headers apenas se houver algum restante
+      // Não há body para esta requisição DELETE conforme doc.txt
     });
+    if (!response.ok) {
+      try {
+        const errorBody = await response.clone().json();
+        console.error(`salesApi.removeOfferItem: Erro ${response.status}. Corpo:`, JSON.stringify(errorBody, null, 2));
+      } catch (e) {
+        console.error(`salesApi.removeOfferItem: Erro ${response.status}. Não foi possível parsear corpo do erro.`);
+      }
+    }
     return response.json();
   },
 

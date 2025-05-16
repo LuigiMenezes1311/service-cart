@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-const SALES_API_URL = process.env.NEXT_PUBLIC_API_URL
+const SALES_API_URL = process.env.NEXT_PUBLIC_API_SALES_URL
 
 export async function GET(
   req: NextRequest,
