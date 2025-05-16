@@ -81,11 +81,18 @@ interface ProcessedCartItemForConfirmation {
 interface StoredOrderDetails {
   orderId: string;
   date: string;
-  total: number; // Total final PAGO (com todos os descontos)
-  finalRecurrentOfferDetails: SalesApiOffer | null; // Mantido para datas e outros detalhes da oferta
-  finalOneTimeOfferDetails: SalesApiOffer | null;   // Mantido para datas e outros detalhes da oferta
-  processedItems: ProcessedCartItemForConfirmation[]; // <--- ESTE É O CAMPO CHAVE COM OS ITENS E PREÇOS FINAIS
+  total: number; 
+  finalRecurrentOfferDetails: SalesApiOffer | null; 
+  finalOneTimeOfferDetails: SalesApiOffer | null;   
+  processedItems: ProcessedCartItemForConfirmation[]; 
   sessionDetails?: { id: string; [key: string]: any }; 
+  projectStartDate?: string;
+  paymentStartDate?: string;
+  payDay?: number;
+  // Campos de configuração do usuário adicionados
+  userSelectedOfferDurationMonths?: number;
+  userSelectedInstallmentMonths?: number;
+  configuredOfferType?: "RECURRENT" | "ONE_TIME";
 }
 
 interface EnrichedOrderDetailsForPage {
@@ -274,57 +281,38 @@ export default function PedidoConfirmadoPage() {
       }
 
       try {
-        const parsedStoredDetails = JSON.parse(storedOrderDetailsJson) as StoredOrderDetails;
+        const storedData: StoredOrderDetails = JSON.parse(storedOrderDetailsJson);
         
-        const displayItems: DisplayableOrderItem[] = [];
-        
-        // Determinar a oferta primária para datas, etc. (NÃO para preços dos itens)
-        let primaryOfferForDates: SalesApiOffer | null = null;
-        if (parsedStoredDetails.finalRecurrentOfferDetails) { // Priorizar recorrente para datas se existir
-            primaryOfferForDates = parsedStoredDetails.finalRecurrentOfferDetails;
-        } else if (parsedStoredDetails.finalOneTimeOfferDetails) {
-            primaryOfferForDates = parsedStoredDetails.finalOneTimeOfferDetails;
-        }
-        
-        // ---- INÍCIO DA NOVA LÓGICA PARA POPULAR displayItems ----
-        if (parsedStoredDetails.processedItems && parsedStoredDetails.processedItems.length > 0) {
-          parsedStoredDetails.processedItems.forEach(processedItem => {
-            displayItems.push({
-              id: processedItem.id,
-              name: processedItem.name, // Nome já vem do carrinho
-              quantity: processedItem.quantity,
-              price: processedItem.finalPricePerUnit, // Preço unitário COM DESCONTO
-              totalItemPrice: processedItem.finalTotalItemPrice, // Preço total do item COM DESCONTO
-              type: processedItem.paymentType, // Tipo do item (RECURRENT ou ONE_TIME)
-            });
-          });
-        } else {
-          // Fallback muito básico se processedItems não existir (deve ser raro)
-          // Esta lógica resultaria em preços base, não os finais com desconto.
-          console.warn("PedidoConfirmadoPage: parsedStoredDetails.processedItems não encontrado ou vazio. Os preços exibidos podem ser os base, sem descontos finais.");
-          // Se precisar de um fallback mais robusto, seria necessário reconstruir a partir das offerItems e recalcular descontos aqui,
-          // o que seria redundante se o carrinho já fez isso.
-          // Por ora, se processedItems não vier, a exibição não terá os preços corretos.
-        }
-        // ---- FIM DA NOVA LÓGICA PARA POPULAR displayItems ----
+        const primaryOfferFromApi = storedData.finalRecurrentOfferDetails || storedData.finalOneTimeOfferDetails;
+
+        const displayableItems: DisplayableOrderItem[] = storedData.processedItems.map(pItem => ({
+          id: pItem.id,
+          name: pItem.name,
+          quantity: pItem.quantity,
+          price: pItem.finalPricePerUnit,
+          totalItemPrice: pItem.finalTotalItemPrice,
+          type: pItem.paymentType,
+        }));
 
         const enrichedDetails: EnrichedOrderDetailsForPage = {
-          orderId: parsedStoredDetails.orderId || primaryOfferForDates?.id || "N/D",
-          date: parsedStoredDetails.date || (primaryOfferForDates?.createdAt ? formatDate(primaryOfferForDates.createdAt, {day: 'numeric', month: 'long', year: 'numeric'}) : "N/D"),
-          // O total já é o total LÍQUIDO GERAL vindo do carrinho, que é a soma dos finalTotalItemPrice dos processedItems
-          total: parsedStoredDetails.total, 
-          displayableItems: displayItems,
-          projectStartDate: primaryOfferForDates?.projectStartDate,
-          paymentStartDate: primaryOfferForDates?.paymentStartDate,
-          payDay: primaryOfferForDates?.payDay,
-          installmentMonths: primaryOfferForDates?.installmentMonths,
-          offerDurationMonths: primaryOfferForDates?.offerDurationMonths,
-          offerType: primaryOfferForDates?.type,
-          sessionDetails: parsedStoredDetails.sessionDetails,
+          orderId: storedData.orderId,
+          date: storedData.date,
+          displayableItems: displayableItems,
+          total: storedData.total,
+          projectStartDate: storedData.projectStartDate,
+          paymentStartDate: storedData.paymentStartDate,
+          payDay: storedData.payDay,
+          
+          // Usar os valores configurados pelo usuário, com fallback para os da API se não existirem
+          offerDurationMonths: storedData.userSelectedOfferDurationMonths !== undefined ? storedData.userSelectedOfferDurationMonths : primaryOfferFromApi?.offerDurationMonths,
+          installmentMonths: storedData.userSelectedInstallmentMonths !== undefined ? storedData.userSelectedInstallmentMonths : primaryOfferFromApi?.installmentMonths,
+          offerType: storedData.configuredOfferType || primaryOfferFromApi?.type, 
+          
+          sessionDetails: storedData.sessionDetails,
         };
         
         setOrderDetails(enrichedDetails);
-        await processOrderConfirmationApiCall(parsedStoredDetails.sessionDetails?.id);
+        await processOrderConfirmationApiCall(storedData.sessionDetails?.id);
 
       } catch (processingError) {
         console.error("Erro ao processar detalhes do pedido:", processingError);
@@ -359,46 +347,54 @@ export default function PedidoConfirmadoPage() {
         date: formatDate(startDate, { day: 'numeric', month: 'short' }),
         dayInCircle: startDate.getDate().toString(),
         title: "Início do Projeto",
-        description: "Início dos serviços contratados conforme o pedido realizado.",
+        description: "Início dos serviços contratados.", // Descrição simplificada
         stepNumber: stepCounter++,
       });
     }
 
+    let firstPayDateObj: Date | null = null;
     if (paymentStartDate) {
-      const firstPayDate = new Date(paymentStartDate.includes('T') ? paymentStartDate : paymentStartDate + "T00:00:00");
+      firstPayDateObj = new Date(paymentStartDate.includes('T') ? paymentStartDate : paymentStartDate + "T00:00:00");
       schedule.push({
-        rawDate: firstPayDate,
-        date: formatDate(firstPayDate, { day: 'numeric', month: 'short' }),
-        dayInCircle: firstPayDate.getDate().toString(),
+        rawDate: firstPayDateObj,
+        date: formatDate(firstPayDateObj, { day: 'numeric', month: 'short' }),
+        dayInCircle: firstPayDateObj.getDate().toString(),
         title: "Primeiro Pagamento",
         description: "Processamento do primeiro pagamento.",
         stepNumber: stepCounter++,
       });
 
       let dateOfSecondPaymentEvent: Date | null = null;
-
-      if (offerType === "RECURRENT" && payDay && (offerDurationMonths || 0) > 1) {
-        let p2Date = new Date(firstPayDate);
-        p2Date.setDate(payDay); // Define o dia para payDay no mês corrente de firstPayDate
-
-        // Se p2Date for no mesmo dia ou antes de firstPayDate,
-        // precisamos avançar p2Date para o payDay do mês seguinte.
-        if (p2Date.getTime() <= firstPayDate.getTime()) {
+      if (offerType === "RECURRENT" && payDay && (offerDurationMonths || 0) >= 2 && firstPayDateObj) {
+        let p2Date = new Date(firstPayDateObj);
+        p2Date.setDate(payDay); 
+        if (p2Date.getTime() <= firstPayDateObj.getTime()) {
           p2Date.setMonth(p2Date.getMonth() + 1);
-          // Reafirma o payDay no novo mês, pois setMonth pode mudar o dia se o payDay original não existir (ex: 31 em Fev)
-          p2Date.setDate(payDay); 
         }
-        
-        // Garante que a data do segundo pagamento é estritamente após o primeiro.
-        if (p2Date.getTime() > firstPayDate.getTime()) {
+        // Após potencialmente mudar o mês, reafirme o dia do pagamento.
+        p2Date.setDate(payDay); 
+        // Garante que p2Date é no futuro e realmente no payDay correto
+        // (setDate pode retroceder o mês se payDay for > dias no mês após setMonth)
+        if (p2Date.getMonth() === (firstPayDateObj.getMonth() +1 ) % 12 && p2Date.getDate() !== payDay){
+             // Isso pode acontecer se o payDay for, por exemplo, 31 e o próximo mês for Fevereiro.
+             // Nesse caso, a data seria algo como 03/Mar. Corrigir para último dia do mês anterior (Fevereiro).
+             const correctMonth = new Date(firstPayDateObj);
+             correctMonth.setMonth(correctMonth.getMonth() + 1);
+             p2Date = new Date(correctMonth.getFullYear(), correctMonth.getMonth() + 1, 0); // Último dia do mês desejado
+        } else if (p2Date.getTime() <= firstPayDateObj.getTime()) {
+            // Se ainda não for futuro, tente avançar mais um mês (caso raro, mas para segurança)
+            p2Date.setMonth(p2Date.getMonth() + 1);
+            p2Date.setDate(payDay);
+        }
+
+        if (p2Date.getTime() > firstPayDateObj.getTime()) {
           dateOfSecondPaymentEvent = p2Date;
         }
 
-      } else if (offerType === "ONE_TIME" && (installmentMonths || 0) > 1) {
-        const nextInstallment = new Date(firstPayDate);
+      } else if (offerType === "ONE_TIME" && (installmentMonths || 0) >= 2 && firstPayDateObj) {
+        const nextInstallment = new Date(firstPayDateObj);
         nextInstallment.setMonth(nextInstallment.getMonth() + 1);
-        // Garante que a data da próxima parcela é estritamente após a primeira.
-        if (nextInstallment.getTime() > firstPayDate.getTime()) {
+        if (nextInstallment.getTime() > firstPayDateObj.getTime()) {
           dateOfSecondPaymentEvent = nextInstallment;
         }
       }
@@ -408,27 +404,52 @@ export default function PedidoConfirmadoPage() {
           rawDate: dateOfSecondPaymentEvent,
           date: formatDate(dateOfSecondPaymentEvent, { day: 'numeric', month: 'short' }),
           dayInCircle: dateOfSecondPaymentEvent.getDate().toString(),
-          title: "Segunda Cobrança Programada",
-          description: offerType === "RECURRENT" ? "Segunda cobrança da sua assinatura." : "Segunda parcela do seu serviço.",
+          title: "Segunda Cobrança",
+          description: offerType === "RECURRENT" ? "Próxima cobrança da assinatura." : "Próxima parcela do serviço.",
           stepNumber: stepCounter++,
         });
+
+        let dateOfThirdPaymentEvent: Date | null = null;
+        if (offerType === "RECURRENT" && payDay && (offerDurationMonths || 0) >= 3 && dateOfSecondPaymentEvent) {
+          let p3Date = new Date(dateOfSecondPaymentEvent);
+          p3Date.setDate(payDay); 
+          if (p3Date.getTime() <= dateOfSecondPaymentEvent.getTime()) {
+            p3Date.setMonth(p3Date.getMonth() + 1);
+          }
+          p3Date.setDate(payDay);
+          // Similar à lógica de p2Date para garantir que está no futuro e no mês correto
+          if (p3Date.getMonth() === (dateOfSecondPaymentEvent.getMonth() +1 ) % 12 && p3Date.getDate() !== payDay){
+             const correctMonthP3 = new Date(dateOfSecondPaymentEvent);
+             correctMonthP3.setMonth(correctMonthP3.getMonth() + 1);
+             p3Date = new Date(correctMonthP3.getFullYear(), correctMonthP3.getMonth() + 1, 0);
+          } else if (p3Date.getTime() <= dateOfSecondPaymentEvent.getTime()){
+            p3Date.setMonth(p3Date.getMonth() + 1);
+            p3Date.setDate(payDay);
+          }
+
+          if (p3Date.getTime() > dateOfSecondPaymentEvent.getTime()) {
+            dateOfThirdPaymentEvent = p3Date;
+          }
+        } else if (offerType === "ONE_TIME" && (installmentMonths || 0) >= 3 && dateOfSecondPaymentEvent) {
+          const nextNextInstallment = new Date(dateOfSecondPaymentEvent);
+          nextNextInstallment.setMonth(nextNextInstallment.getMonth() + 1);
+          if (nextNextInstallment.getTime() > dateOfSecondPaymentEvent.getTime()) {
+            dateOfThirdPaymentEvent = nextNextInstallment;
+          }
+        }
+
+        if (dateOfThirdPaymentEvent) {
+          schedule.push({
+            rawDate: dateOfThirdPaymentEvent,
+            date: formatDate(dateOfThirdPaymentEvent, { day: 'numeric', month: 'short' }),
+            dayInCircle: dateOfThirdPaymentEvent.getDate().toString(),
+            title: "Terceira Cobrança",
+            description: offerType === "RECURRENT" ? "Cobrança subsequente." : "Parcela subsequente.",
+            stepNumber: stepCounter++,
+          });
+        }
       }
     }
-    // Adicionar mais passos se necessário, ou passos placeholder para layout se o design exigir sempre 3.
-    // A imagem do usuário tinha 3 passos fixos. Se sempre queremos 3:
-    // while(schedule.length < 3 && schedule.length > 0) {
-    //    const lastStep = schedule[schedule.length-1];
-    //    const nextDateEstimate = new Date(lastStep.rawDate);
-    //    nextDateEstimate.setMonth(nextDateEstimate.getMonth() + 1);
-    //    schedule.push({
-    //        rawDate: nextDateEstimate,
-    //        date: formatDate(nextDateEstimate, {day: 'numeric', month: 'short'}),
-    //        dayInCircle: "?",
-    //        title: "Pagamento Futuro",
-    //        description: "Etapa de pagamento subsequente.",
-    //        stepNumber: stepCounter++
-    //    });
-    // }
     return schedule;
   }, [orderDetails]);
 

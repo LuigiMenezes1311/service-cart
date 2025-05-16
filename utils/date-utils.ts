@@ -34,14 +34,14 @@ export function ensureValidDate(date: Date, fallback: Date = new Date()): Date {
 }
 
 /**
- * Calculate the first payment date (7 days after start date)
+ * Calculate the first payment date (10 days after start date)
  *
  * @param startDate - The project start date
  * @returns The first payment date
  */
 export function calculateFirstPaymentDate(startDate: string): Date {
   const startDateObj = new Date(startDate)
-  return new Date(startDateObj.getTime() + 7 * 24 * 60 * 60 * 1000)
+  return new Date(startDateObj.getTime() + 10 * 24 * 60 * 60 * 1000)
 }
 
 /**

@@ -95,7 +95,7 @@ export function DatesStep({
             {/* First Payment Date (Read-only) */}
             <DateSelectionCard
               title="Data do Primeiro Pagamento"
-              description="O primeiro pagamento ocorre 7 dias após o início dos serviços."
+              description="O primeiro pagamento ocorre 10 dias após o início dos serviços."
               value={formatDateForDisplay(firstPaymentDate)}
               isEditable={false}
             />
@@ -108,7 +108,7 @@ export function DatesStep({
           <div className="mt-8 bg-white rounded-lg p-6 border border-gray-100 shadow-sm">
             <h4 className="text-base font-medium mb-4 text-center">Cronograma de Pagamentos</h4>
             <p className="text-sm text-gray-600 mb-4 text-center">
-              Principais marcos do seu projeto: Início dos serviços, Primeiro pagamento (7 dias após início) e Segundo
+              Principais marcos do seu projeto: Início dos serviços, Primeiro pagamento (10 dias após início) e Segundo
               pagamento mensal (dia {monthlyPaymentDay})
             </p>
             <PaymentTimeline

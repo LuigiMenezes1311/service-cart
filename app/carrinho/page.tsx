@@ -672,28 +672,40 @@ export default function CarrinhoPage() {
 
     // Atualizar ofertas com as datas selecionadas pelo usuário
     try {
-      const updatePayload = {
-        projectStartDate: projectDates.startDate,
-        paymentStartDate: projectDates.firstPaymentDate,
-        payDay: projectDates.monthlyPaymentDay,
-      };
+      // const updatePayload = { // Payload não é mais necessário neste formato
+      //   projectStartDate: projectDates.startDate,
+      //   paymentStartDate: projectDates.firstPaymentDate,
+      //   payDay: projectDates.monthlyPaymentDay,
+      // };
 
-      if (recurrentOfferId && recurringItems.length > 0) {
-        // console.log(`Atualizando oferta recorrente ${recurrentOfferId} com datas:`, updatePayload);
-        await salesApi.updateOffer(recurrentOfferId, updatePayload);
-      }
-      if (oneTimeOfferId && oneTimeItems.length > 0) {
-        // console.log(`Atualizando oferta pontual ${oneTimeOfferId} com datas:`, updatePayload);
-        await salesApi.updateOffer(oneTimeOfferId, updatePayload);
-      }
+      // Removido pois o cronograma não tem handle na API e é montado localmente
+      // if (recurrentOfferId && recurringItems.length > 0) {
+      //   // console.log(`Atualizando oferta recorrente ${recurrentOfferId} com datas:`, projectDates);
+      //   await salesApi.updateOfferDates(
+      //     recurrentOfferId, 
+      //     projectDates.startDate, 
+      //     projectDates.firstPaymentDate, 
+      //     projectDates.monthlyPaymentDay
+      //   );
+      // }
+      // if (oneTimeOfferId && oneTimeItems.length > 0) {
+      //   // console.log(`Atualizando oferta pontual ${oneTimeOfferId} com datas:`, projectDates);
+      //   await salesApi.updateOfferDates(
+      //     oneTimeOfferId,
+      //     projectDates.startDate,
+      //     projectDates.firstPaymentDate,
+      //     projectDates.monthlyPaymentDay
+      //   );
+      // }
     } catch (error) {
-      console.error("Erro ao atualizar ofertas com datas:", error);
-      toast({
-        title: "Erro ao Salvar Datas",
-        description: "Não foi possível salvar as datas do projeto nas ofertas. O cronograma pode não ser exibido corretamente.",
-        variant: "destructive",
-      });
-      // Considerar se deve parar o checkout aqui ou permitir continuar com cronograma potencialmente ausente.
+      console.error("Erro ao tentar atualizar ofertas com datas (agora removido):", error);
+      // toast({
+      //   title: "Erro ao Salvar Datas", // Esta mensagem pode não ser mais relevante
+      //   description: "Não foi possível salvar as datas do projeto nas ofertas. O cronograma pode não ser exibido corretamente.",
+      //   variant: "destructive",
+      // });
+      // Não há mais chamada de API aqui, então o erro original não deve ocorrer.
+      // Se houver outro erro dentro deste bloco try (improvável agora), ele seria capturado.
     }
 
     try {
@@ -799,11 +811,19 @@ export default function CarrinhoPage() {
       finalRecurrentOfferDetails: finalRecurrentOfferDetails,
       finalOneTimeOfferDetails: finalOneTimeOfferDetails,
       
-      processedItems: processedItemsForConfirmation, // NOVO CAMPO
+      processedItems: processedItemsForConfirmation,
+
+      // Campos de data do projeto do frontend explicitamente
+      projectStartDate: projectDates.startDate,
+      paymentStartDate: projectDates.firstPaymentDate,
+      payDay: projectDates.monthlyPaymentDay,
+
+      // Campos de configuração do usuário para o cronograma
+      userSelectedOfferDurationMonths: selectedProjectDurationDetails?.months,
+      userSelectedInstallmentMonths: selectedOneTimeInstallmentDetails?.installment || selectedRecurringInstallmentDetails?.installment, // Ajustar se necessário para distinguir
+      configuredOfferType: (recurringItems.length > 0 && selectedProjectDurationDetails) ? "RECURRENT" : ((oneTimeItems.length > 0 && selectedOneTimeInstallmentDetails) ? "ONE_TIME" : undefined),
 
       sessionDetails: currentSession ? { id: currentSession.id } : undefined,
-      // Remover 'items' antigos se 'processedItems' for suficiente
-      // items: items.map(cartItem => ({ ... })) 
     };
 
     console.log("handleCheckout: Dados que serão salvos no localStorage para 'orderDetails':", JSON.stringify(orderDataToStore, null, 2));
