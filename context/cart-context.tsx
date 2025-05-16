@@ -61,21 +61,53 @@ export function CartProvider({ children }: { children: ReactNode }) {
     const offerItemsFromApi = apiOffer.offerItems || [];
     
     const newLocalItemsPromises = offerItemsFromApi.map(async (apiItem: ApiOfferItem) => {
-      const localItemData = localCartForEnrichment.find(
-        localItem => localItem.id === apiItem.productId 
+      // Tenta encontrar o item local correspondente incluindo o modificador (productType da API)
+      let localItemData = localCartForEnrichment.find(
+        localItem => localItem.id === apiItem.productId && localItem.selectedModifierValue === apiItem.productType
       );
+      
+      // Se não encontrar correspondência exata (produto + modificador), 
+      // tentar encontrar pelo productId para pegar dados base do produto se possível.
+      if (!localItemData) {
+        localItemData = localCartForEnrichment.find(
+          localItem => localItem.id === apiItem.productId
+        );
+      }
 
       let productNameFromCatalogOrStorage = localItemData?.name;
+      let productDescriptionFromCatalogOrStorage = localItemData?.description || "";
+      let productSingleItemOnly = localItemData?.singleItemOnly || false; 
+      let productCategoryId = localItemData?.categoryId || "";
+      let productPrices = localItemData?.prices;
+      let productDeliverables = localItemData?.deliverables || [];
+      let productGuidelines = localItemData?.guidelines || [];
+      let productCreatedBy = localItemData?.createdBy || "";
+      let productImage = localItemData?.image;
+      let productStatus = localItemData?.status || "ACTIVE";
+      let productCreatedAt = localItemData?.createdAt;
+      let productUpdatedAt = localItemData?.updatedAt;
 
-      if (!productNameFromCatalogOrStorage && apiItem.productId) {
-        console.log(`CartContext_syncLogic: Product ID ${apiItem.productId} - Nome não encontrado localmente, buscando na API de Catálogo...`);
+
+      if ((!productNameFromCatalogOrStorage || !localItemData?.description) && apiItem.productId) { // Busca se nome ou descrição não estão completos
+        console.log(`CartContext_syncLogic: Product ID ${apiItem.productId} - Dados incompletos localmente, buscando na API de Catálogo...`);
         try {
           const productDetails = await getProductById(apiItem.productId);
-          if (productDetails && productDetails.name) {
-            productNameFromCatalogOrStorage = productDetails.name;
-            console.log(`CartContext_syncLogic: Product ID ${apiItem.productId} - Nome encontrado na API de Catálogo: "${productDetails.name}"`);
+          if (productDetails) {
+            productNameFromCatalogOrStorage = productDetails.name || productNameFromCatalogOrStorage;
+            productDescriptionFromCatalogOrStorage = productDetails.description || productDescriptionFromCatalogOrStorage;
+            productSingleItemOnly = productDetails.singleItemOnly || productSingleItemOnly;
+            productCategoryId = productDetails.categoryId || productCategoryId;
+            productPrices = productDetails.prices && productDetails.prices.length > 0 ? productDetails.prices : productPrices;
+            productDeliverables = productDetails.deliverables && productDetails.deliverables.length > 0 ? productDetails.deliverables : productDeliverables;
+            productGuidelines = productDetails.guidelines && productDetails.guidelines.length > 0 ? productDetails.guidelines : productGuidelines;
+            productCreatedBy = productDetails.createdBy || productCreatedBy;
+            productStatus = productDetails.status || productStatus;
+            productCreatedAt = productDetails.createdAt || productCreatedAt;
+            productUpdatedAt = productDetails.updatedAt || productUpdatedAt;
+            // productImage não costuma vir da API de products, manter o local se houver.
+            console.log(`CartContext_syncLogic: Product ID ${apiItem.productId} - Dados enriquecidos da API de Catálogo.`);
           } else {
-            console.warn(`CartContext_syncLogic: Product ID ${apiItem.productId} - Nome não encontrado na API de Catálogo ou produto sem nome.`);
+            console.warn(`CartContext_syncLogic: Product ID ${apiItem.productId} - Não encontrado na API de Catálogo.`);
           }
         } catch (error) {
           console.error(`CartContext_syncLogic: Product ID ${apiItem.productId} - Falha ao buscar detalhes do produto da API de Catálogo:`, error);
@@ -84,8 +116,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
       const finalName = productNameFromCatalogOrStorage || "Produto da Oferta";
 
-      console.log(`CartContext_syncLogic: Product ID: ${apiItem.productId}`);
-      console.log(`CartContext_syncLogic:   localItemData found: ${localItemData ? 'Yes' : 'No'}`);
+      console.log(`CartContext_syncLogic: Product ID: ${apiItem.productId}, ProductType: ${apiItem.productType}`);
+      console.log(`CartContext_syncLogic:   localItemData (for ${apiItem.productType}) found: ${localItemData ? 'Yes' : 'No'}`);
       if (localItemData) {
         console.log(`CartContext_syncLogic:   localItemData.name (from localStorage/catalog): "${localItemData.name}"`);
       }
@@ -94,23 +126,23 @@ export function CartProvider({ children }: { children: ReactNode }) {
       return {
         id: apiItem.productId,
         name: finalName, 
-        description: localItemData?.description || "",
+        description: productDescriptionFromCatalogOrStorage,
         paymentType: apiOffer.type,
-        status: localItemData?.status || "ACTIVE",
-        singleItemOnly: localItemData?.singleItemOnly || false,
-        categoryId: localItemData?.categoryId || "",
-        prices: localItemData?.prices && localItemData.prices.length > 0 
-                ? localItemData.prices 
-                : [{ id: apiItem.priceId, amount: apiItem.price, currencyId: "BRL", modifierTypeId: null }],
-        deliverables: localItemData?.deliverables || [],
-        guidelines: localItemData?.guidelines || [],
-        createdBy: localItemData?.createdBy || "",
-        createdAt: localItemData?.createdAt || new Date().toISOString(),
-        updatedAt: localItemData?.updatedAt || new Date().toISOString(),
-        image: localItemData?.image,
+        status: productStatus,
+        singleItemOnly: productSingleItemOnly,
+        categoryId: productCategoryId,
+        prices: productPrices && productPrices.length > 0 
+                ? productPrices 
+                : [{ id: apiItem.priceId, amount: apiItem.price, currencyId: "BRL", modifierTypeId: apiItem.productType }],
+        deliverables: productDeliverables,
+        guidelines: productGuidelines,
+        createdBy: productCreatedBy,
+        createdAt: productCreatedAt || new Date().toISOString(),
+        updatedAt: productUpdatedAt || new Date().toISOString(),
+        image: productImage,
         displayPrice: apiItem.price, 
         quantity: apiItem.quantity,
-        selectedModifierValue: localItemData?.selectedModifierValue, 
+        selectedModifierValue: apiItem.productType, // ATRIBUIÇÃO DIRETA DE productType
       };
     });
 
@@ -264,16 +296,18 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const itemCount = items.reduce((count, item) => count + item.quantity, 0)
 
   const addToCart = async (product: Product, quantity: number = 1, selectedModifierValue?: string, modifierPrice?: number) => {
-    console.log("addToCart: Iniciado para produto:", product.name, "Tipo:", product.paymentType, "SingleItemOnly:", product.singleItemOnly);
+    console.log("addToCart: Iniciado para produto:", product.name, "Tipo:", product.paymentType, "SingleItemOnly:", product.singleItemOnly, "Modificador:", selectedModifierValue);
 
     if (product.singleItemOnly) {
       const currentLocalItemsForCheck = JSON.parse(localStorage.getItem(CART_STORAGE_KEY) || "[]") as CartItem[];
-      const existingItemInStorage = currentLocalItemsForCheck.find(item => item.id === product.id);
+      const existingItemInStorage = currentLocalItemsForCheck.find(
+        item => item.id === product.id && item.selectedModifierValue === selectedModifierValue
+      );
       
       if (existingItemInStorage) {
       toast({
           title: "Item já no carrinho",
-          description: `"${product.name}" só pode ser adicionado uma vez.`,
+          description: `"${product.name}" ${selectedModifierValue ? `(${selectedModifierValue})` : ''} já está no carrinho e só pode ser adicionado uma vez com o mesmo modificador.`,
           variant: "default",
           duration: 3000
         });
@@ -309,7 +343,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
       if (updatedOfferFromApi && !(updatedOfferFromApi.statusCode >= 400 || updatedOfferFromApi.errors)) {
         console.log("addToCart: Item adicionado à oferta pela API com sucesso:", updatedOfferFromApi);
-        toast({ title: "Item adicionado!", description: `"${product.name}" foi adicionado ao seu carrinho.`, duration: 2000 });
+        toast({ title: "Item adicionado!", description: `"${product.name}" ${selectedModifierValue ? `(${selectedModifierValue})` : ''} foi adicionado ao seu carrinho.`, duration: 2000 });
 
         const newCartItem: CartItem = {
           id: product.id,
@@ -359,7 +393,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         if (errorCode === "PRODUCT_ALREADY_ADDED" && product.singleItemOnly) {
              toast({
                 title: "Item já existe",
-                description: `"${product.name}" já está no carrinho e só pode ser adicionado uma vez.`,
+                description: `"${product.name}" ${selectedModifierValue ? `(${selectedModifierValue})` : ''} já está no carrinho e só pode ser adicionado uma vez com o mesmo modificador.`,
                 variant: "destructive"
             });
         } else {
@@ -412,10 +446,13 @@ export function CartProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    const offerItemToRemove = offerToSyncFrom.offerItems.find(oi => oi.productId === productId);
+    // Encontra o item na oferta da API usando productId e productType (que corresponde a selectedModifierValue)
+    const offerItemToRemove = offerToSyncFrom.offerItems.find(
+      oi => oi.productId === productId && oi.productType === itemInContext.selectedModifierValue
+    );
     
     if (!offerItemToRemove) {
-      console.warn("removeFromCart: Item não encontrado na oferta da API. Removendo apenas do estado local (pode indicar dessincronia).");
+      console.warn("removeFromCart: Item não encontrado na oferta da API com o modificador esperado. Removendo apenas do estado local (pode indicar dessincronia).");
       syncLocalCartFromApiOffer(offerToSyncFrom, localCartSnapshot.filter(item => !(item.id === productId && item.selectedModifierValue === selectedModifierValue)));
       toast({ title: "Item já não estava na oferta", description: "O item foi removido do seu carrinho local.", variant: "default" });
       return;
@@ -452,7 +489,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }
 
   const updateQuantity = async (productId: string, selectedModifierValue: string | undefined, newQuantity: number) => {
-    console.log(`updateQuantity: Iniciando para productId: ${productId}, newQuantity: ${newQuantity}`);
+    console.log(`updateQuantity: Iniciando para productId: ${productId}, modifier: ${selectedModifierValue}, newQuantity: ${newQuantity}`);
     const itemInCart = items.find(i => i.id === productId && i.selectedModifierValue === selectedModifierValue);
     if (!itemInCart) {
       console.warn("updateQuantity: Item não encontrado no carrinho local.");
@@ -484,13 +521,20 @@ export function CartProvider({ children }: { children: ReactNode }) {
       }
     }
     
-    const offerItemToUpdate = offerToModify.offerItems.find(oi => oi.productId === productId);
+    // Encontra o item na oferta da API usando productId e productType (que corresponde a selectedModifierValue)
+    const offerItemToUpdate = offerToModify.offerItems.find(
+      oi => oi.productId === productId && oi.productType === itemInCart.selectedModifierValue
+    );
 
     if (!offerItemToUpdate && newQuantity > 0) {
-        console.error("updateQuantity: Item não encontrado na oferta da API, mas quantidade > 0. Isso não deveria acontecer se o item está no carrinho local. Tentando adicionar como novo.");
-        const localProductData = items.find(i => i.id === productId);
-        const priceId = localProductData?.prices[0]?.id;
+        console.error("updateQuantity: Item não encontrado na oferta da API para atualizar, mas quantidade > 0. Tentando adicionar como novo.");
+        // const localProductData = items.find(i => i.id === productId && i.selectedModifierValue === selectedModifierValue); // itemInCart já é isso
+        
+        // Tenta obter o priceId a partir do itemInCart, que deve ter o displayPrice correto para o modificador
+        const priceId = itemInCart.prices.find(p => p.id === itemInCart.priceId || p.amount === itemInCart.displayPrice)?.id || itemInCart.prices[0]?.id;
+
         if (priceId) {
+            console.log(`updateQuantity: Adicionando novo item à oferta: offerId=${offerIdToUse}, productId=${productId}, priceId=${priceId}, quantity=${newQuantity}`);
             await salesApi.addOfferItem(offerIdToUse, productId, priceId, newQuantity);
              const latestOffer = await salesApi.getOffer(offerIdToUse);
              setCurrentOffer(latestOffer);
@@ -502,8 +546,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }
     
     if (newQuantity === 0 && !offerItemToUpdate) {
-        console.log("updateQuantity: Quantidade é 0 e item não está na oferta da API. Removendo localmente.");
-        syncLocalCartFromApiOffer(offerToModify, localCartSnapshot.filter(item => item.id !== productId || item.selectedModifierValue !== selectedModifierValue));
+        console.log("updateQuantity: Quantidade é 0 e item não está na oferta da API (já pode ter sido removido ou nunca existiu com este modificador). Removendo localmente.");
+        syncLocalCartFromApiOffer(offerToModify, localCartSnapshot.filter(item => !(item.id === productId && item.selectedModifierValue === selectedModifierValue)));
         toast({ title: "Item removido", duration: 1500 });
         return;
     }
@@ -520,13 +564,19 @@ export function CartProvider({ children }: { children: ReactNode }) {
           finalUpdatedOffer = offerToModify;
         }
       } else if (offerItemToUpdate) {
-        console.log(`updateQuantity: Atualizando quantidade. Removendo item ${offerItemToUpdate.id} e adicionando com quantidade ${newQuantity}`);
+        console.log(`updateQuantity: Atualizando quantidade. Removendo item ${offerItemToUpdate.id} (productId: ${productId}, productType: ${offerItemToUpdate.productType}) e adicionando com quantidade ${newQuantity}`);
         await salesApi.removeOfferItem(offerToModify.id, offerItemToUpdate.id);
+        // Usa o priceId do item que acabou de ser removido da API, que é o correto para esta variação do produto
         finalUpdatedOffer = await salesApi.addOfferItem(offerToModify.id, productId, offerItemToUpdate.priceId, newQuantity);
-      } else {
-         console.log(`updateQuantity: Item não está na oferta. Adicionando productId ${productId} com quantidade ${newQuantity}`);
-         const priceId = itemInCart.prices[0]?.id;
-         if(!priceId) throw new Error ("Não foi possível encontrar priceId para adicionar novo item in updateQuantity.")
+      } else { // Este caso é se newQuantity > 0 mas offerItemToUpdate não foi encontrado (já tratado acima, mas como fallback)
+         console.log(`updateQuantity: Item não está na oferta (productType: ${selectedModifierValue}). Adicionando productId ${productId} com quantidade ${newQuantity}`);
+         // Tenta obter o priceId a partir do itemInCart, que deve ter o displayPrice correto para o modificador
+         const priceId = itemInCart.prices.find(p => p.id === itemInCart.priceId || p.amount === itemInCart.displayPrice)?.id || itemInCart.prices[0]?.id;
+
+         if(!priceId) {
+            console.error("updateQuantity: Não foi possível encontrar priceId para adicionar novo item com modificador.", itemInCart);
+            throw new Error ("Não foi possível encontrar priceId para adicionar novo item em updateQuantity.");
+         }
          finalUpdatedOffer = await salesApi.addOfferItem(offerToModify.id, productId, priceId, newQuantity);
       }
       
