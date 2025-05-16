@@ -7,7 +7,8 @@ import { ProductCard } from "@/components/product-card";
 import { useCart } from "@/context/cart-context";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Loader2, AlertTriangle, Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Loader2, AlertTriangle, Search, ChevronLeft, ChevronRight, Filter } from 'lucide-react';
 import { V4XTeamBuilder } from "./V4XTeamBuilder";
 import { useToast } from "@/components/ui/use-toast";
 
@@ -35,6 +36,9 @@ export function ProductCatalog() {
   // Estados para paginação de produtos
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 9; // 3 colunas, 3 linhas por página
+
+  // Estado para ordenação de produtos
+  const [sortBy, setSortBy] = useState<string>("default");
 
   const { addToCart, isInCart } = useCart();
   const { toast } = useToast();
@@ -131,16 +135,38 @@ export function ProductCatalog() {
       });
   }, [products, searchTerm, selectedCategoryId, activeMainFilter, v4xCategory]);
 
+  // Lógica de ordenação para produtos
+  const sortedProducts = useMemo(() => {
+    let tempProducts = [...filteredProducts];
+
+    switch (sortBy) {
+      case "name-asc":
+        tempProducts.sort((a, b) => a.name.localeCompare(b.name));
+        break;
+      case "name-desc":
+        tempProducts.sort((a, b) => b.name.localeCompare(a.name));
+        break;
+      case "date-desc": // Mais novo primeiro
+        tempProducts.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        break;
+      case "date-asc": // Mais antigo primeiro
+        tempProducts.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+        break;
+      // No caso "default", mantém a ordem de filteredProducts (geralmente pela API ou ID)
+    }
+    return tempProducts;
+  }, [filteredProducts, sortBy]);
+
   // Lógica de paginação para produtos
   const paginatedProducts = useMemo(() => {
     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
     const endIndex = startIndex + ITEMS_PER_PAGE;
-    return filteredProducts.slice(startIndex, endIndex);
-  }, [filteredProducts, currentPage, ITEMS_PER_PAGE]);
+    return sortedProducts.slice(startIndex, endIndex);
+  }, [sortedProducts, currentPage, ITEMS_PER_PAGE]);
 
   const totalPages = useMemo(() => {
-    return Math.ceil(filteredProducts.length / ITEMS_PER_PAGE);
-  }, [filteredProducts, ITEMS_PER_PAGE]);
+    return Math.ceil(sortedProducts.length / ITEMS_PER_PAGE);
+  }, [sortedProducts, ITEMS_PER_PAGE]);
 
   const handleNextPage = () => {
     if (currentPage < totalPages) {
@@ -162,12 +188,25 @@ export function ProductCatalog() {
     return categories.slice(0, CATEGORIES_DISPLAY_LIMIT);
   }, [categories, showAllCategories, CATEGORIES_DISPLAY_LIMIT]);
 
+  // Resetar página ao mudar filtros ou ordenação
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, selectedCategoryId, activeMainFilter, sortBy]);
+
   const mainFilters: { label: string; value: ActiveMainFilterType }[] = [
     { label: "Todos os serviços", value: "ALL" },
     { label: "Serviços recorrentes", value: "RECURRENT" },
     { label: "Serviços pontuais", value: "ONE_TIME" },
     { label: "V4X", value: "V4X" },
     { label: "Variáveis", value: "VARIABLES" },
+  ];
+
+  const sortOptions = [
+    { value: "default", label: "Padrão" },
+    { value: "name-asc", label: "Nome (A-Z)" },
+    { value: "name-desc", label: "Nome (Z-A)" },
+    { value: "date-desc", label: "Mais Recentes" },
+    { value: "date-asc", label: "Mais Antigos" },
   ];
 
   if (isLoading) {
@@ -195,20 +234,45 @@ export function ProductCatalog() {
   return (
     <div className="space-y-8">
       <div className="bg-white p-6 rounded-lg shadow">
-        <div className="relative mb-6">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <Search className="h-5 w-5 text-gray-400" />
+        {/* Barra de Pesquisa e Seletor de Ordenação */}
+        <div className="flex flex-col md:flex-row gap-4 mb-6">
+          {/* Barra de Pesquisa */}
+          <div className="relative flex-grow">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <Search className="h-5 w-5 text-gray-400" />
+            </div>
+            <Input
+              type="text"
+              placeholder="Pesquisar serviços..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full h-12 pl-10 pr-4 text-base border-gray-300 rounded-md focus:ring-red-500 focus:border-red-500 placeholder-gray-500"
+            />
           </div>
-          <Input
-            type="text"
-            placeholder="Pesquisar serviços..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full h-12 pl-10 pr-4 text-base border-gray-300 rounded-md focus:ring-red-500 focus:border-red-500 placeholder-gray-500"
-          />
+
+          {/* Seletor de Ordenação */}
+          {activeMainFilter !== "V4X" && (
+            <div className="flex items-center space-x-2 md:min-w-[220px]"> {/* Adicionado md:min-w para melhor layout em desktop */}
+              <Select value={sortBy} onValueChange={setSortBy}>
+                <SelectTrigger id="sort-by" className="w-full md:w-auto h-12 text-sm border-gray-300 rounded-md focus:ring-red-500 focus:border-red-500">
+                  <div className="flex items-center">
+                    <Filter className="h-4 w-4 mr-2 text-gray-500" />
+                    <SelectValue placeholder="Ordenar por" />
+                  </div>
+                </SelectTrigger>
+                <SelectContent>
+                  {sortOptions.map(option => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </div>
 
-        <div className="flex flex-wrap gap-3 mb-6">
+        <div className="flex flex-wrap gap-3 mb-6 items-center">
           {mainFilters.map((filter) => (
             <button
               key={filter.value}
@@ -218,8 +282,6 @@ export function ProductCatalog() {
                 if (filter.value !== "V4X") {
                   setSelectedCategoryId("ALL"); 
                 }
-                // Se V4X for selecionado, podemos limpar o searchTerm ou outras coisas se necessário.
-                // Por enquanto, apenas mudar o filtro principal.
               }}
               className={`py-2 px-4 rounded-md text-sm font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors
                 ${
@@ -239,39 +301,43 @@ export function ProductCatalog() {
           ))}
         </div>
         
-        {activeMainFilter !== "V4X" && ( // Ocultar filtros de categoria se V4X estiver ativo
-          <div className="flex flex-wrap gap-3">
-            <button
-              onClick={() => setSelectedCategoryId("ALL")}
-              className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500
-                ${selectedCategoryId === "ALL"
-                  ? "bg-gray-700 text-white hover:bg-gray-600"
-                  : "bg-gray-200 text-gray-800 hover:bg-gray-300"
-                }`}
-            >
-              Todas as Categorias
-            </button>
-            {displayedCategories.map(category => (
+        {/* Filtro de Ordenação e Categorias */}
+        {activeMainFilter !== "V4X" && (
+          <div className="flex flex-col space-y-4 mb-6">
+            {/* Filtros de Categoria */}
+            <div className="flex flex-wrap gap-3">
               <button
-                key={category.id}
-                onClick={() => setSelectedCategoryId(category.id)}
+                onClick={() => setSelectedCategoryId("ALL")}
                 className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500
-                  ${selectedCategoryId === category.id
+                  ${selectedCategoryId === "ALL"
                     ? "bg-gray-700 text-white hover:bg-gray-600"
                     : "bg-gray-200 text-gray-800 hover:bg-gray-300"
                   }`}
               >
-                {category.name}
+                Todas as Categorias
               </button>
-            ))}
-            {categories.length > CATEGORIES_DISPLAY_LIMIT && (
-              <button
-                onClick={() => setShowAllCategories(!showAllCategories)}
-                className="px-4 py-1.5 rounded-full text-sm font-medium text-red-600 hover:text-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-              >
-                {showAllCategories ? "Ver menos categorias" : `Ver mais ${categories.length - CATEGORIES_DISPLAY_LIMIT} categorias`}
-              </button>
-            )}
+              {displayedCategories.map(category => (
+                <button
+                  key={category.id}
+                  onClick={() => setSelectedCategoryId(category.id)}
+                  className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500
+                    ${selectedCategoryId === category.id
+                      ? "bg-gray-700 text-white hover:bg-gray-600"
+                      : "bg-gray-200 text-gray-800 hover:bg-gray-300"
+                    }`}
+                >
+                  {category.name}
+                </button>
+              ))}
+              {categories.length > CATEGORIES_DISPLAY_LIMIT && (
+                <button
+                  onClick={() => setShowAllCategories(!showAllCategories)}
+                  className="px-4 py-1.5 rounded-full text-sm font-medium text-red-600 hover:text-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                >
+                  {showAllCategories ? "Ver menos categorias" : `Ver mais ${categories.length - CATEGORIES_DISPLAY_LIMIT} categorias`}
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -296,7 +362,7 @@ export function ProductCatalog() {
         </div>
       )}
 
-      {activeMainFilter !== "V4X" && filteredProducts.length > 0 ? (
+      {activeMainFilter !== "V4X" && sortedProducts.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           {paginatedProducts.map(product => (
             <ProductCard 
@@ -314,12 +380,12 @@ export function ProductCatalog() {
             <path vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
           </svg>
           <h3 className="mt-2 text-lg font-medium text-gray-900">Nenhum serviço encontrado</h3>
-          <p className="mt-1 text-sm text-gray-500">Tente ajustar seus filtros ou o termo de pesquisa.</p>
+          <p className="mt-1 text-sm text-gray-500">Tente ajustar seus filtros, ordenação ou o termo de pesquisa.</p>
         </div>
       )}
 
       {/* Controles de Paginação */} 
-      {activeMainFilter !== "V4X" && filteredProducts.length > ITEMS_PER_PAGE && (
+      {activeMainFilter !== "V4X" && sortedProducts.length > ITEMS_PER_PAGE && (
         <div className="mt-8 flex justify-center items-center space-x-4">
           <Button
             onClick={handlePreviousPage}
